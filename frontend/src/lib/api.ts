@@ -25,3 +25,26 @@ export const api = {
 	listBattles: () => callTool('arena_list_battles'),
 	watchBattle: (battle_id: string) => callTool('arena_watch_battle', { battle_id })
 };
+
+// ─── SSE subscription for real-time updates ───────────────────────────────────
+// Replaces polling on the live battle page.
+export function subscribeToBattle(
+	battleId: string,
+	onUpdate: (data: unknown) => void,
+	onError?: () => void
+): () => void {
+	const url = `${BASE}/events/${battleId.toUpperCase()}`;
+	const es = new EventSource(url);
+
+	es.addEventListener('battle_update', (e) => {
+		try { onUpdate(JSON.parse((e as MessageEvent).data)); } catch {}
+	});
+
+	es.onerror = () => {
+		onError?.();
+		// SSE auto-reconnects — only call onError for UI indication
+	};
+
+	// Return unsubscribe function
+	return () => es.close();
+}

@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { Battle, Contender, Round, RoundScores, BattleStatus, RoundWinner } from "../types.js";
@@ -6,93 +7,115 @@ import type { Battle, Contender, Round, RoundScores, BattleStatus, RoundWinner }
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
 
-// ─── Singleton DB connection ──────────────────────────────────────────────────
+// ─── Singleton sql.js DB ──────────────────────────────────────────────────────
 
-let _db: Database.Database | null = null;
+let _db: SqlJsDatabase | null = null;
 
-export function getDb(): Database.Database {
+async function getDb(): Promise<SqlJsDatabase> {
   if (_db) return _db;
 
-  import("fs").then(fs => fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }));
+  const SQL = await initSqlJs();
 
-  _db = new Database(DB_PATH);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
+  mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+  if (existsSync(DB_PATH)) {
+    const fileBuffer = readFileSync(DB_PATH);
+    _db = new SQL.Database(fileBuffer);
+  } else {
+    _db = new SQL.Database();
+  }
+
   initSchema(_db);
   return _db;
 }
 
-function initSchema(db: Database.Database): void {
-  db.exec(`
+// Persist DB to disk after each write operation
+function persist(db: SqlJsDatabase): void {
+  const data = db.export();
+  writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+function initSchema(db: SqlJsDatabase): void {
+  db.run(`
     CREATE TABLE IF NOT EXISTS battles (
-      id            TEXT PRIMARY KEY,
-      topic         TEXT NOT NULL,
-      status        TEXT NOT NULL DEFAULT 'waiting',
-      max_rounds    INTEGER NOT NULL DEFAULT 3,
-      current_round INTEGER NOT NULL DEFAULT 0,
+      id              TEXT PRIMARY KEY,
+      topic           TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'waiting',
+      max_rounds      INTEGER NOT NULL DEFAULT 3,
+      current_round   INTEGER NOT NULL DEFAULT 0,
       spectator_count INTEGER NOT NULL DEFAULT 0,
-      created_at    TEXT NOT NULL,
-      started_at    TEXT,
-      finished_at   TEXT,
-      final_winner  TEXT
+      created_at      TEXT NOT NULL,
+      started_at      TEXT,
+      finished_at     TEXT,
+      final_winner    TEXT
     );
 
     CREATE TABLE IF NOT EXISTS contenders (
-      battle_id     TEXT NOT NULL,
-      side          TEXT NOT NULL,
-      name          TEXT NOT NULL,
-      stance        TEXT NOT NULL,
-      device        TEXT NOT NULL,
-      connected_at  TEXT NOT NULL,
+      battle_id    TEXT NOT NULL,
+      side         TEXT NOT NULL,
+      name         TEXT NOT NULL,
+      stance       TEXT NOT NULL,
+      device       TEXT NOT NULL,
+      connected_at TEXT NOT NULL,
       PRIMARY KEY (battle_id, side),
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
 
     CREATE TABLE IF NOT EXISTS rounds (
-      battle_id         TEXT NOT NULL,
-      round_number      INTEGER NOT NULL,
-      alpha_argument    TEXT NOT NULL DEFAULT '',
-      beta_argument     TEXT NOT NULL DEFAULT '',
-      winner            TEXT,
-      judge_verdict     TEXT NOT NULL DEFAULT '',
-      alpha_coherence   INTEGER NOT NULL DEFAULT 0,
-      beta_coherence    INTEGER NOT NULL DEFAULT 0,
-      alpha_evidence    INTEGER NOT NULL DEFAULT 0,
-      beta_evidence     INTEGER NOT NULL DEFAULT 0,
-      alpha_rhetoric    INTEGER NOT NULL DEFAULT 0,
-      beta_rhetoric     INTEGER NOT NULL DEFAULT 0,
-      alpha_total       INTEGER NOT NULL DEFAULT 0,
-      beta_total        INTEGER NOT NULL DEFAULT 0,
-      completed_at      TEXT,
+      battle_id       TEXT NOT NULL,
+      round_number    INTEGER NOT NULL,
+      alpha_argument  TEXT NOT NULL DEFAULT '',
+      beta_argument   TEXT NOT NULL DEFAULT '',
+      winner          TEXT,
+      judge_verdict   TEXT NOT NULL DEFAULT '',
+      alpha_coherence INTEGER NOT NULL DEFAULT 0,
+      beta_coherence  INTEGER NOT NULL DEFAULT 0,
+      alpha_evidence  INTEGER NOT NULL DEFAULT 0,
+      beta_evidence   INTEGER NOT NULL DEFAULT 0,
+      alpha_rhetoric  INTEGER NOT NULL DEFAULT 0,
+      beta_rhetoric   INTEGER NOT NULL DEFAULT 0,
+      alpha_total     INTEGER NOT NULL DEFAULT 0,
+      beta_total      INTEGER NOT NULL DEFAULT 0,
+      completed_at    TEXT,
       PRIMARY KEY (battle_id, round_number),
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
   `);
+  persist(db);
 }
 
-// ─── Battle CRUD ──────────────────────────────────────────────────────────────
+// ─── Query helpers ────────────────────────────────────────────────────────────
 
-export function createBattle(id: string, topic: string, maxRounds: number): Battle {
-  const db = getDb();
-  const now = new Date().toISOString();
+type SqlParam = string | number | null | Uint8Array;
 
-  db.prepare(`
-    INSERT INTO battles (id, topic, status, max_rounds, current_round, spectator_count, created_at)
-    VALUES (?, ?, 'waiting', ?, 0, 0, ?)
-  `).run(id, topic, maxRounds, now);
-
-  return getBattle(id)!;
+function queryAll<T>(db: SqlJsDatabase, sql: string, params: SqlParam[] = []): T[] {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  const rows: T[] = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject() as T);
+  }
+  stmt.free();
+  return rows;
 }
 
-export function getBattle(id: string): Battle | null {
-  const db = getDb();
+function queryOne<T>(db: SqlJsDatabase, sql: string, params: SqlParam[] = []): T | null {
+  const rows = queryAll<T>(db, sql, params);
+  return rows[0] ?? null;
+}
 
-  const row = db.prepare("SELECT * FROM battles WHERE id = ?").get(id) as Record<string, unknown> | undefined;
-  if (!row) return null;
+function run(db: SqlJsDatabase, sql: string, params: SqlParam[] = []): void {
+  db.run(sql, params);
+  persist(db);
+}
 
-  const contenderRows = db.prepare("SELECT * FROM contenders WHERE battle_id = ?").all(id) as Record<string, unknown>[];
-  const roundRows = db.prepare("SELECT * FROM rounds WHERE battle_id = ? ORDER BY round_number").all(id) as Record<string, unknown>[];
+// ─── Battle assembly ──────────────────────────────────────────────────────────
 
+function assembleBattle(
+  row: Record<string, unknown>,
+  contenderRows: Record<string, unknown>[],
+  roundRows: Record<string, unknown>[]
+): Battle {
   const contenders: Record<string, Contender> = {};
   for (const c of contenderRows) {
     contenders[c["side"] as string] = {
@@ -113,14 +136,14 @@ export function getBattle(id: string): Battle | null {
     completed_at: r["completed_at"] as string,
     scores: {
       alpha_coherence: r["alpha_coherence"] as number,
-      beta_coherence: r["beta_coherence"] as number,
-      alpha_evidence: r["alpha_evidence"] as number,
-      beta_evidence: r["beta_evidence"] as number,
-      alpha_rhetoric: r["alpha_rhetoric"] as number,
-      beta_rhetoric: r["beta_rhetoric"] as number,
-      alpha_total: r["alpha_total"] as number,
-      beta_total: r["beta_total"] as number,
-    }
+      beta_coherence:  r["beta_coherence"] as number,
+      alpha_evidence:  r["alpha_evidence"] as number,
+      beta_evidence:   r["beta_evidence"] as number,
+      alpha_rhetoric:  r["alpha_rhetoric"] as number,
+      beta_rhetoric:   r["beta_rhetoric"] as number,
+      alpha_total:     r["alpha_total"] as number,
+      beta_total:      r["beta_total"] as number,
+    },
   }));
 
   return {
@@ -140,92 +163,124 @@ export function getBattle(id: string): Battle | null {
   };
 }
 
-export function listActiveBattles(): Battle[] {
-  const db = getDb();
-  const rows = db.prepare(
-    "SELECT id FROM battles WHERE status IN ('waiting','active','judging') ORDER BY created_at DESC LIMIT 20"
-  ).all() as { id: string }[];
-  return rows.map(r => getBattle(r.id)!).filter(Boolean);
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function createBattle(id: string, topic: string, maxRounds: number): Promise<Battle> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  run(db, `
+    INSERT INTO battles (id, topic, status, max_rounds, current_round, spectator_count, created_at)
+    VALUES (?, ?, 'waiting', ?, 0, 0, ?)
+  `, [id, topic, maxRounds, now]);
+  return (await getBattle(id))!;
 }
 
-export function addContender(
-  battleId: string,
-  side: "alpha" | "beta",
-  name: string,
-  stance: string,
-  device: string
-): void {
-  const db = getDb();
-  const now = new Date().toISOString();
+export async function getBattle(id: string): Promise<Battle | null> {
+  const db = await getDb();
+  const row = queryOne<Record<string, unknown>>(db, "SELECT * FROM battles WHERE id = ?", [id]);
+  if (!row) return null;
+  const contenderRows = queryAll<Record<string, unknown>>(db, "SELECT * FROM contenders WHERE battle_id = ?", [id]);
+  const roundRows = queryAll<Record<string, unknown>>(db, "SELECT * FROM rounds WHERE battle_id = ? ORDER BY round_number", [id]);
+  return assembleBattle(row, contenderRows, roundRows);
+}
 
-  db.prepare(`
+export async function listActiveBattles(): Promise<Battle[]> {
+  const db = await getDb();
+  const rows = queryAll<{ id: string }>(db,
+    "SELECT id FROM battles WHERE status IN ('waiting','active','judging') ORDER BY created_at DESC LIMIT 20"
+  );
+  const battles = await Promise.all(rows.map(r => getBattle(r.id)));
+  return battles.filter((b): b is Battle => b !== null);
+}
+
+export async function addContender(
+  battleId: string, side: "alpha" | "beta",
+  name: string, stance: string, device: string
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  run(db, `
     INSERT OR REPLACE INTO contenders (battle_id, side, name, stance, device, connected_at)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(battleId, side, name, stance, device, now);
+  `, [battleId, side, name, stance, device, now]);
 }
 
-export function updateBattleStatus(battleId: string, status: BattleStatus): void {
-  const db = getDb();
+export async function updateBattleStatus(battleId: string, status: BattleStatus): Promise<void> {
+  const db = await getDb();
   const now = new Date().toISOString();
-
-  const updates: string[] = ["status = ?"];
-  const params: unknown[] = [status];
-
-  if (status === "active") { updates.push("started_at = ?"); params.push(now); }
-  if (status === "finished") { updates.push("finished_at = ?"); params.push(now); }
-
-  params.push(battleId);
-  db.prepare(`UPDATE battles SET ${updates.join(", ")} WHERE id = ?`).run(...params);
+  if (status === "active") {
+    run(db, "UPDATE battles SET status = ?, started_at = ? WHERE id = ?", [status, now, battleId]);
+  } else if (status === "finished") {
+    run(db, "UPDATE battles SET status = ?, finished_at = ? WHERE id = ?", [status, now, battleId]);
+  } else {
+    run(db, "UPDATE battles SET status = ? WHERE id = ?", [status, battleId]);
+  }
 }
 
-export function setFinalWinner(battleId: string, winner: "alpha" | "beta" | "draw"): void {
-  getDb().prepare("UPDATE battles SET final_winner = ?, status = 'finished', finished_at = ? WHERE id = ?")
-    .run(winner, new Date().toISOString(), battleId);
+export async function setFinalWinner(battleId: string, winner: "alpha" | "beta" | "draw"): Promise<void> {
+  const db = await getDb();
+  run(db, "UPDATE battles SET final_winner = ?, status = 'finished', finished_at = ? WHERE id = ?",
+    [winner, new Date().toISOString(), battleId]);
 }
 
-export function incrementRound(battleId: string): void {
-  getDb().prepare("UPDATE battles SET current_round = current_round + 1 WHERE id = ?").run(battleId);
+export async function incrementRound(battleId: string): Promise<void> {
+  const db = await getDb();
+  run(db, "UPDATE battles SET current_round = current_round + 1 WHERE id = ?", [battleId]);
 }
 
-export function saveArgument(battleId: string, round: number, side: "alpha" | "beta", argument: string): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT OR IGNORE INTO rounds (battle_id, round_number) VALUES (?, ?)
-  `).run(battleId, round);
-
+export async function saveArgument(
+  battleId: string, round: number,
+  side: "alpha" | "beta", argument: string
+): Promise<void> {
+  const db = await getDb();
+  run(db, "INSERT OR IGNORE INTO rounds (battle_id, round_number) VALUES (?, ?)", [battleId, round]);
   const col = side === "alpha" ? "alpha_argument" : "beta_argument";
-  db.prepare(`UPDATE rounds SET ${col} = ? WHERE battle_id = ? AND round_number = ?`)
-    .run(argument, battleId, round);
+  run(db, `UPDATE rounds SET ${col} = ? WHERE battle_id = ? AND round_number = ?`, [argument, battleId, round]);
 }
 
-export function saveJudgeVerdict(
-  battleId: string,
-  round: number,
+export async function saveJudgeVerdict(
+  battleId: string, round: number,
   winner: "alpha" | "beta" | "draw",
-  verdict: string,
-  scores: RoundScores
-): void {
-  const db = getDb();
-  db.prepare(`
+  verdict: string, scores: RoundScores
+): Promise<void> {
+  const db = await getDb();
+  run(db, `
     UPDATE rounds SET
       winner = ?, judge_verdict = ?,
       alpha_coherence = ?, beta_coherence = ?,
-      alpha_evidence = ?, beta_evidence = ?,
-      alpha_rhetoric = ?, beta_rhetoric = ?,
-      alpha_total = ?, beta_total = ?,
+      alpha_evidence  = ?, beta_evidence  = ?,
+      alpha_rhetoric  = ?, beta_rhetoric  = ?,
+      alpha_total = ?,     beta_total = ?,
       completed_at = ?
     WHERE battle_id = ? AND round_number = ?
-  `).run(
+  `, [
     winner, verdict,
     scores.alpha_coherence, scores.beta_coherence,
-    scores.alpha_evidence, scores.beta_evidence,
-    scores.alpha_rhetoric, scores.beta_rhetoric,
-    scores.alpha_total, scores.beta_total,
+    scores.alpha_evidence,  scores.beta_evidence,
+    scores.alpha_rhetoric,  scores.beta_rhetoric,
+    scores.alpha_total,     scores.beta_total,
     new Date().toISOString(),
-    battleId, round
-  );
+    battleId, round,
+  ]);
 }
 
-export function incrementSpectators(battleId: string): void {
-  getDb().prepare("UPDATE battles SET spectator_count = spectator_count + 1 WHERE id = ?").run(battleId);
+export async function incrementSpectators(battleId: string): Promise<void> {
+  const db = await getDb();
+  run(db, "UPDATE battles SET spectator_count = spectator_count + 1 WHERE id = ?", [battleId]);
+}
+
+// ─── Cleanup (called by cleanup job) ─────────────────────────────────────────
+
+export async function archiveOldBattles(): Promise<number> {
+  const db = await getDb();
+  // Archive battles finished more than 7 days ago
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const before = queryAll<{ id: string }>(db,
+    "SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?", [cutoff]
+  );
+  if (before.length === 0) return 0;
+  run(db, "DELETE FROM rounds WHERE battle_id IN (SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?)", [cutoff]);
+  run(db, "DELETE FROM contenders WHERE battle_id IN (SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?)", [cutoff]);
+  run(db, "DELETE FROM battles WHERE status = 'finished' AND finished_at < ?", [cutoff]);
+  return before.length;
 }
