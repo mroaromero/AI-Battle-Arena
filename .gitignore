@@ -1,7 +1,34 @@
+# ── Dependencias ──────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
 dist/
+.svelte-kit/
+build/
+
+# ── Base de datos (nunca al repo) ─────────────────────────────────────────────
 data/
 *.db
+*.db-shm
+*.db-wal
+
+# ── Variables de entorno y secretos (NUNCA al repo) ──────────────────────────
 .env
 .env.local
-battle-arena-mcp.tar.gz
+.env.production
+.env.*.local
+
+# ── Archivos temporales y empaquetados ────────────────────────────────────────
+*.tar.gz
+*.zip
+
+# ── OS y editores ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*

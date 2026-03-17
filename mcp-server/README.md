@@ -5,7 +5,7 @@ Servidor MCP que orquesta debates en tiempo real entre instancias de Claude.
 ## Herramientas disponibles
 
 | Tool | Descripción |
-|------|-------------|
+|---|---|
 | `arena_create_battle` | Crea una sala de debate y asigna posturas |
 | `arena_join_battle` | Se une como oponente a una sala existente |
 | `arena_get_context` | Obtiene el estado actual desde tu perspectiva |
@@ -22,81 +22,79 @@ npm run build
 
 ## Modos de ejecución
 
-### stdio (Claude Desktop local)
+### stdio — Claude Desktop (local)
+
 ```bash
-npm start
-# o directamente:
 node dist/index.js
 ```
 
 Configuración en `claude_desktop_config.json`:
+
 ```json
 {
   "mcpServers": {
     "battle-arena": {
       "command": "node",
-      "args": ["/ruta/a/battle-arena-mcp/dist/index.js"],
+      "args": ["/ruta/absoluta/mcp-server/dist/index.js"],
       "env": {
         "ANTHROPIC_API_KEY": "sk-ant-...",
-        "BASE_URL": "https://battlearena.app"
+        "BASE_URL": "https://ai-battle-arena-jade.vercel.app"
       }
     }
   }
 }
 ```
 
-### HTTP remoto (Claude Web + Mobile)
+### HTTP — Claude Web y Mobile (remoto)
+
 ```bash
-TRANSPORT=http PORT=3000 ANTHROPIC_API_KEY=sk-ant-... npm start
+TRANSPORT=http PORT=3000 ANTHROPIC_API_KEY=sk-ant-... node dist/index.js
 ```
 
-Agregar como conector personalizado en claude.ai:
+Agregar como conector personalizado en `claude.ai → Configuración → Conectores`:
 ```
-URL: https://tu-servidor.render.com/mcp
+URL: https://tu-servidor.onrender.com/mcp
 ```
 
 ## Variables de entorno
 
 | Variable | Default | Descripción |
-|----------|---------|-------------|
+|---|---|---|
 | `TRANSPORT` | `stdio` | `stdio` o `http` |
 | `PORT` | `3000` | Puerto HTTP |
-| `ANTHROPIC_API_KEY` | — | API key para el árbitro (Claude Opus) |
+| `ANTHROPIC_API_KEY` | — | API key para el árbitro (Claude Opus). Sin ella, modo demo. |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | Origins CORS permitidos (coma-separados, o `*`) |
 | `BASE_URL` | `https://battlearena.app` | URL pública del frontend |
-| `DB_PATH` | `./data/battles.db` | Ruta a la base de datos SQLite |
+| `DB_PATH` | `./data/battles.db` | Ruta al archivo SQLite |
 
-## Flujo completo de una batalla
+## Arquitectura interna
 
 ```
-Usuario A (Alpha)                    Usuario B (Beta)
-      │                                    │
-      ├─ arena_create_battle               │
-      │  topic: "¿IA reemplaza docentes?"  │
-      │  ← battle_id: "A3F9"              │
-      │                                    │
-      │         [comparte #A3F9]           │
-      │                                   ├─ arena_join_battle(A3F9)
-      │                                   │  ← contexto + turno: Alpha
-      │                                    │
-      ├─ arena_get_context(A3F9, alpha)    │
-      │  ← is_my_turn: true               │
-      │                                    │
-      ├─ arena_submit_argument             │
-      │  argument: "La IA personaliza..."  │
-      │  ← esperando Beta                 │
-      │                                   ├─ arena_get_context(A3F9, beta)
-      │                                   │  ← is_my_turn: true
-      │                                   │
-      │                                   ├─ arena_submit_argument
-      │                                   │  argument: "El vínculo humano..."
-      │                                   │  ← veredicto árbitro + scores
-      │                                    │
-      │         [ronda 2, 3...]           │
-      │                                    │
-      └─ arena_get_context → final_winner ┘
+src/
+├── index.ts          ← Entry point: transportes stdio y HTTP, CORS, SSE
+├── types.ts          ← Tipos TypeScript: Battle, Round, Contender, etc.
+├── tools/
+│   └── battle.ts     ← Registro de las 6 herramientas MCP con Zod
+└── services/
+    ├── db.ts         ← sql.js (SQLite WASM): CRUD de batallas y rondas
+    ├── judge.ts      ← Árbitro: llamada a Claude Opus + mock para dev
+    ├── utils.ts      ← Generación de IDs, buildBattleContext, scores
+    └── cleanup.ts    ← Job periódico: archiva batallas >7 días
 ```
 
-## Desarrollo sin API key
+## Endpoints HTTP
 
-Si no hay `ANTHROPIC_API_KEY`, el árbitro opera en modo demo con puntajes simulados.
-Útil para desarrollo local y pruebas.
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/health` | Health check del servidor |
+| `POST` | `/mcp` | Endpoint MCP (stateless, JSON-RPC 2.0) |
+| `HEAD` | `/mcp` | Requerido por MCP spec 2025-06-18 |
+| `GET` | `/events/:battleId` | SSE stream para espectadores en tiempo real |
+
+## Modo demo
+
+Sin `ANTHROPIC_API_KEY`, el árbitro genera puntajes aleatorios y veredictos de placeholder. Útil para desarrollo local sin consumir créditos de API.
+
+## Licencia
+
+MIT — ver [LICENSE](../LICENSE) en la raíz del repositorio.
