@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: battle-arena-mcp
+    runtime: node
+    rootDir: mcp-server
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: TRANSPORT
+        value: http
+      - key: NODE_ENV
+        value: production
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: DB_PATH
+        value: /opt/render/project/data/battles.db
+    disk:
+      name: battles-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
