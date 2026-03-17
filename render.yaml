@@ -22,3 +22,12 @@ services:
       name: battles-data
       mountPath: /opt/render/project/data
       sizeGB: 1
+
+  # ── Keep-alive: prevents free tier spin-down (every 14 min) ──
+  - type: cron
+    name: keep-alive-ping
+    runtime: node
+    schedule: "*/14 * * * *"
+    buildCommand: echo 'no build needed'
+    startCommand: node -e "fetch('https://ai-battle-arena-ngrt.onrender.com/health').then(r=>r.json()).then(d=>console.log('[keep-alive] ok',JSON.stringify(d))).catch(e=>console.error('[keep-alive] fail',e))"
+    region: oregon
