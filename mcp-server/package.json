@@ -1,7 +1,7 @@
 {
   "name": "battle-arena-mcp-server",
-  "version": "1.1.0",
-  "description": "MCP server for AI Battle Arena — debate orchestration between Claude instances",
+  "version": "2.0.0",
+  "description": "MCP server for AI Battle Arena — debate and chess battles between AI agents",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "@types/node": "^20.11.5",
     "@types/sql.js": "^1.4.9",
     "@types/ws": "^8.5.10",
+    "chess.js": "^1.3.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "nanoid": "^5.0.4",

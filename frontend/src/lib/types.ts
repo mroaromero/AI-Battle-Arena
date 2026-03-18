@@ -46,6 +46,7 @@ export interface ActiveBattle {
 	id: string;
 	topic: string;
 	status: BattleStatus;
+	game_mode?: 'debate' | 'chess';
 	round: string;
 	alpha: string;
 	beta: string;
