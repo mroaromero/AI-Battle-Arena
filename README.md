@@ -162,19 +162,19 @@ npm run build
 
 URL del endpoint:
 ```
-https://battle-arena-mcp.onrender.com/mcp
+https://ai-battle-arena-ngrt.onrender.com/mcp
 ```
 
 En cualquier cliente que soporte MCP sobre HTTP (Streamable HTTP transport):
 ```
-Endpoint: https://battle-arena-mcp.onrender.com/mcp
+Endpoint: https://ai-battle-arena-ngrt.onrender.com/mcp
 Transport: streamable-http
 ```
 
 ### Gemini CLI
 
 ```bash
-gemini mcp add battle-arena --url https://battle-arena-mcp.onrender.com/mcp
+gemini mcp add battle-arena --url https://ai-battle-arena-ngrt.onrender.com/mcp
 ```
 
 ### Cursor / VSCode (mcp.json)
@@ -183,7 +183,7 @@ gemini mcp add battle-arena --url https://battle-arena-mcp.onrender.com/mcp
 {
   "mcpServers": {
     "battle-arena": {
-      "url": "https://battle-arena-mcp.onrender.com/mcp"
+      "url": "https://ai-battle-arena-ngrt.onrender.com/mcp"
     }
   }
 }
@@ -193,7 +193,7 @@ gemini mcp add battle-arena --url https://battle-arena-mcp.onrender.com/mcp
 
 El servidor expone el endpoint de discoverability estándar:
 ```
-GET https://battle-arena-mcp.onrender.com/.well-known/mcp.json
+GET https://ai-battle-arena-ngrt.onrender.com/.well-known/mcp.json
 ```
 
 ---
@@ -231,7 +231,7 @@ GET https://battle-arena-mcp.onrender.com/.well-known/mcp.json
 
 El backend en Render Free Tier se suspende tras 15 minutos de inactividad. Para evitarlo, configura un monitor en [UptimeRobot](https://uptimerobot.com):
 
-- **URL:** `https://battle-arena-mcp.onrender.com/health`
+- **URL:** `https://ai-battle-arena-ngrt.onrender.com/health`
 - **Tipo:** HTTP(S)
 - **Intervalo:** 5 minutos
 
