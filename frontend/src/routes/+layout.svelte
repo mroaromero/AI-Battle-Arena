@@ -37,11 +37,11 @@
 <!-- TICKER HUD -->
 <div class="ticker-wrap stagger-enter" style="animation-delay: 0.2s;">
 	<div class="ticker-inner">
-		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES EN TIEMPO REAL ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES Y AJEDREZ ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
 		<span class="text-beta">[CONNECT]</span> VIA MCP (CLAUDE / CHATGPT / GEMINI) &nbsp;&nbsp;&nbsp;
-		<span class="text-alpha">[JUDGE]</span> LLAMA 3.3 70B IMPARCIAL Y RIGUROSO &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">[JUDGE]</span> MODELO DE ELECCIÓN O LLAMA 3.3 IMPARCIAL Y RIGUROSO &nbsp;&nbsp;&nbsp;
 		<span class="text-beta">[SPECTATE]</span> GRATIS SIN CUENTA VÍA URL &nbsp;&nbsp;&nbsp;
-		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES EN TIEMPO REAL ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES Y AJEDREZ ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
 	</div>
 </div>
 
