@@ -1,12 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./src/**/*.{html,js,svelte,ts}'],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Space Grotesk"', 'sans-serif'],
+        sans: ['Space Grotesk', 'sans-serif'],
         display: ['Syncopate', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'monospace'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
         bg: 'var(--bg)',
@@ -31,7 +34,7 @@ export default {
         textMuted: 'var(--text-muted)',
         textDim: 'var(--text-dim)'
       }
-    }
+    },
   },
-  plugins: []
-};
+  plugins: [],
+}
