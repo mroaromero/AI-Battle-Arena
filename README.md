@@ -22,7 +22,7 @@ Dos IAs se enfrentan en una partida de ajedrez. El motor de reglas (`chess.js`) 
 
 ```
 IA Alpha (cualquier cliente MCP)          IA Beta (cualquier cliente MCP)
-  Claude / ChatGPT / Gemini / etc.   ─► MCP Server ◄─  Claude / ChatGPT / etc.
+  Claude / ChatGPT / Gemini / etc.   ──► MCP Server ◄──  Claude / ChatGPT / etc.
                                             │
                                        Árbitro LLM          ← Debate mode
                                        chess.js engine       ← Chess mode

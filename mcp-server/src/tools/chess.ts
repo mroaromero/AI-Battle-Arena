@@ -40,9 +40,9 @@ Returns: { battle_id, join_url, my_color, share_message, instructions }`,
         const id = generateBattleId();
         // topic encodes the mode
         await createBattle(id, "Partida de Ajedrez", 999, "chess");
-        await addContender(id, "alpha", my_name, "Blancas \u2654", my_device);
+        await addContender(id, "alpha", my_name, "Blancas ♔", my_device);
         // Pre-register Beta placeholder
-        await addContender(id, "beta", "TBD", "Negras \u265A", "");
+        await addContender(id, "beta", "TBD", "Negras ♚", "");
 
         // Initialize chess state
         const initialState = createInitialChessState();
@@ -54,7 +54,7 @@ Returns: { battle_id, join_url, my_color, share_message, instructions }`,
           my_color: "white",
           join_url: `${baseUrl}/chess/${id}`,
           share_message: `¡Te desafío a una partida de ajedrez en AI Battle Arena! Código: #${id}. Únete en ${baseUrl}`,
-          instructions: `Sala #${id} creada. Juegas con las Blancas \u2654. Comparte el código. Una vez que tu oponente se una, usa 'arena_get_board' para ver el tablero y 'arena_make_move' para jugar.`,
+          instructions: `Sala #${id} creada. Juegas con las Blancas ♔. Comparte el código. Una vez que tu oponente se una, usa 'arena_get_board' para ver el tablero y 'arena_make_move' para jugar.`,
         });
       } catch (e) {
         return err(`Error creando partida: ${String(e)}`);
@@ -77,7 +77,7 @@ Args:
   - my_name: Tu nombre visible
   - my_device: Tu cliente de IA
 
-Returns: ChessContext con el tablero inicial y tus instrucciones como Negras \u265A.`,
+Returns: ChessContext con el tablero inicial y tus instrucciones como Negras ♚.`,
       inputSchema: z.object({
         battle_id: z.string().length(4).toUpperCase().describe("Código de sala"),
         my_name:   z.string().min(2).max(50).describe("Tu nombre"),
@@ -93,7 +93,7 @@ Returns: ChessContext con el tablero inicial y tus instrucciones como Negras \u2
         if (battle.game_mode !== "chess") return err(`La sala #${bid} es de debate, no de ajedrez.`);
         if (battle.status !== "waiting") return err(`La partida #${bid} ya está en curso o finalizada.`);
 
-        await addContender(bid, "beta", my_name, "Negras \u265A", my_device);
+        await addContender(bid, "beta", my_name, "Negras ♚", my_device);
         await updateBattleStatus(bid, "active");
 
         const fresh = await getBattle(bid);
@@ -102,7 +102,7 @@ Returns: ChessContext con el tablero inicial y tus instrucciones como Negras \u2
 
         return ok({
           ...context,
-          welcome: `¡Bienvenido/a a la partida #${bid}! Juegas con las Negras \u265A. ${fresh.alpha?.name ?? "Blancas"} comienzan. Usa 'arena_get_board' para ver el tablero.`,
+          welcome: `¡Bienvenido/a a la partida #${bid}! Juegas con las Negras ♚. ${fresh.alpha?.name ?? "Blancas"} comienzan. Usa 'arena_get_board' para ver el tablero.`,
         });
       } catch (e) {
         return err(`Error uniéndose a la partida: ${String(e)}`);
