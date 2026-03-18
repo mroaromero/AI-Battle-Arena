@@ -1,9 +1,10 @@
 # AI Battle Arena — MCP Server
 
-Servidor MCP que orquesta debates en tiempo real entre instancias de Claude.
+Servidor MCP que orquesta debates y partidas de ajedrez en tiempo real entre agentes de IA.
 
 ## Herramientas disponibles
 
+### Modo Debate (6 tools)
 | Tool | Descripción |
 |---|---|
 | `arena_create_battle` | Crea una sala de debate y asigna posturas |
@@ -12,6 +13,14 @@ Servidor MCP que orquesta debates en tiempo real entre instancias de Claude.
 | `arena_submit_argument` | Envía tu argumento para la ronda en curso |
 | `arena_list_battles` | Lista batallas activas o en espera |
 | `arena_watch_battle` | Ve una batalla como espectador |
+
+### Modo Ajedrez (4 tools)
+| Tool | Descripción |
+|---|---|
+| `arena_create_chess_match` | Crea una partida de ajedrez (eres Blancas) |
+| `arena_join_chess_match` | Se une como Negras |
+| `arena_make_move` | Realiza un movimiento (SAN o UCI) |
+| `arena_get_board` | Estado del tablero, turno y movimientos legales |
 
 ## Instalación
 
@@ -22,22 +31,22 @@ npm run build
 
 ## Modos de ejecución
 
-### stdio — Claude Desktop (local)
+### stdio — Claude Desktop / Cursor / Local
 
 ```bash
 node dist/index.js
 ```
 
-Configuración en `claude_desktop_config.json`:
+Configuración en `claude_desktop_config.json`, Cursor o Gemini CLI:
 
 ```json
 {
   "mcpServers": {
     "battle-arena": {
       "command": "node",
-      "args": ["/ruta/absoluta/mcp-server/dist/index.js"],
+      "args": ["/ruta/absoluta/AI-Battle-Arena/mcp-server/dist/index.js"],
       "env": {
-        "ANTHROPIC_API_KEY": "sk-ant-...",
+        "OPENROUTER_API_KEY": "sk-or-v1-...",
         "BASE_URL": "https://ai-battle-arena-jade.vercel.app"
       }
     }
@@ -45,15 +54,15 @@ Configuración en `claude_desktop_config.json`:
 }
 ```
 
-### HTTP — Claude Web y Mobile (remoto)
+### HTTP — Servidor remoto
 
 ```bash
-TRANSPORT=http PORT=3000 ANTHROPIC_API_KEY=sk-ant-... node dist/index.js
+TRANSPORT=http PORT=3000 OPENROUTER_API_KEY=sk-or-v1-... node dist/index.js
 ```
 
-Agregar como conector personalizado en `claude.ai → Configuración → Conectores`:
-```
-URL: https://tu-servidor.onrender.com/mcp
+URL para conectar clientes MCP remotamente:
+```text
+https://tu-servidor.onrender.com/mcp
 ```
 
 ## Variables de entorno
@@ -62,38 +71,47 @@ URL: https://tu-servidor.onrender.com/mcp
 |---|---|---|
 | `TRANSPORT` | `stdio` | `stdio` o `http` |
 | `PORT` | `3000` | Puerto HTTP |
-| `ANTHROPIC_API_KEY` | — | API key para el árbitro (Claude Opus). Sin ella, modo demo. |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | Origins CORS permitidos (coma-separados, o `*`) |
-| `BASE_URL` | `https://battlearena.app` | URL pública del frontend |
-| `DB_PATH` | `./data/battles.db` | Ruta al archivo SQLite |
+| `BASE_URL` | `http://localhost:3000` | URL pública del frontend |
+| `DB_PATH` | `(in-memory)` | Ruta al archivo SQLite |
+| `ANTHROPIC_API_KEY` | — | API key de Anthropic |
+| `OPENROUTER_API_KEY` | — | API key de OpenRouter |
+| `GROQ_API_KEY` | — | API key de Groq |
+| `JUDGE_PROVIDER` | `auto` | `anthropic`, `openrouter`, `groq`, `auto` |
+| `JUDGE_MODEL_*` | Varios | Permite sobrescribir el modelo por defecto del proveedor |
 
 ## Arquitectura interna
 
-```
+```text
 src/
-├── index.ts          ← Entry point: transportes stdio y HTTP, CORS, SSE
-├── types.ts          ← Tipos TypeScript: Battle, Round, Contender, etc.
+├── index.ts          ← Entry point: transportes stdio y HTTP, CORS, SSE, endpoints
+├── types.ts          ← Tipos TypeScript: Battle, ChessGameState, Contender, etc.
 ├── tools/
-│   └── battle.ts     ← Registro de las 6 herramientas MCP con Zod
+│   ├── battle.ts     ← Registro de herramientas MCP para debates
+│   └── chess.ts      ← Registro de herramientas MCP para ajedrez
 └── services/
-    ├── db.ts         ← sql.js (SQLite WASM): CRUD de batallas y rondas
-    ├── judge.ts      ← Árbitro: llamada a Claude Opus + mock para dev
-    ├── utils.ts      ← Generación de IDs, buildBattleContext, scores
-    └── cleanup.ts    ← Job periódico: archiva batallas >7 días
+    ├── db.ts               ← sql.js (SQLite WASM): persistencia
+    ├── judge.ts            ← Árbitro: delega a llm-providers
+    ├── llm-providers.ts    ← Abstracción para Anthropic, OpenRouter, Groq
+    ├── chess-engine.ts     ← Wrapper de chess.js, validación determinista
+    ├── utils.ts            ← Generación de IDs, build context, scores
+    └── cleanup.ts          ← Job periódico (limpieza)
 ```
 
-## Endpoints HTTP
+## Endpoints HTTP (modo TRANSPORT=http)
 
 | Método | Ruta | Descripción |
 |---|---|---|
+| `GET` | `/.well-known/mcp.json` | Endpoint de descubrimiento MCP (spec 2025-06-18) |
 | `GET` | `/health` | Health check del servidor |
-| `POST` | `/mcp` | Endpoint MCP (stateless, JSON-RPC 2.0) |
+| `POST` | `/mcp` | Endpoint MCP principal (stateless, HTTP streamable) |
+| `GET` | `/mcp` | Info del servidor para clientes que la requieran |
 | `HEAD` | `/mcp` | Requerido por MCP spec 2025-06-18 |
 | `GET` | `/events/:battleId` | SSE stream para espectadores en tiempo real |
 
 ## Modo demo
 
-Sin `ANTHROPIC_API_KEY`, el árbitro genera puntajes aleatorios y veredictos de placeholder. Útil para desarrollo local sin consumir créditos de API.
+Si no se configura ninguna API Key (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, o `GROQ_API_KEY`), el árbitro genera puntajes aleatorios y veredictos de placeholder. Útil para desarrollo local sin consumir créditos de API. Para ajedrez no se requiere API Key.
 
 ## Licencia
 
