@@ -4,7 +4,7 @@
 	import { api } from '$lib/api';
 	import type { Battle } from '$lib/types';
 
-	const battleId = $page.params.id.toUpperCase();
+	const battleId = ($page.params.id || '').toUpperCase();
 
 	let battle = $state<Battle | null>(null);
 	let loading = $state(true);
@@ -45,15 +45,15 @@
 
 	function winnerName(w: string | null) {
 		if (!w) return '';
-		if (w === 'draw') return 'Empate';
-		if (w === 'alpha') return battle?.contenders.alpha?.name ?? 'Alpha';
-		return battle?.contenders.beta?.name ?? 'Beta';
+		if (w === 'draw') return 'DRAW';
+		if (w === 'alpha') return battle?.contenders.alpha?.name ?? 'ALPHA';
+		return battle?.contenders.beta?.name ?? 'BETA';
 	}
 
 	function statusLabel(s: string) {
-		return s === 'waiting'  ? 'Esperando oponente' :
-			   s === 'active'   ? 'En curso' :
-			   s === 'judging'  ? 'Árbitro evaluando...' : 'Finalizada';
+		return s === 'waiting'  ? 'AWAITING_OPPONENT' :
+			   s === 'active'   ? 'SYS_ACTIVE' :
+			   s === 'judging'  ? 'JUDGING_PHASE' : 'TERMINATED';
 	}
 </script>
 
@@ -61,339 +61,367 @@
 	<title>#{battleId} — AI Battle Arena</title>
 </svelte:head>
 
-{#if loading}
-	<div class="center-state">
-		<div class="spinner-lg"></div>
-		<span class="font-mono">Cargando batalla #{battleId}...</span>
-	</div>
-{:else if error || !battle}
-	<div class="center-state error">
-		<span class="err-icon">⚠</span>
-		<p>{error || 'Batalla no encontrada.'}</p>
-		<a href="/" class="back-link">← Volver al lobby</a>
-	</div>
-{:else}
-
-<!-- BATTLE HEADER -->
-<div class="battle-header">
-	<div class="header-top">
-		<a href="/" class="back-link">← Lobby</a>
-		<div class="status-group">
-			{#if battle.status !== 'finished'}
-				<span class="live-indicator"><span class="live-dot"></span> En vivo</span>
-			{/if}
-			<span class="tag {battle.status === 'active' ? 'tag-green' : battle.status === 'judging' ? 'tag-gold' : 'tag-dim'}">
-				{statusLabel(battle.status)}
-			</span>
-			<span class="room-id font-mono">#{battleId}</span>
+<div class="debate-container">
+	{#if loading}
+		<div class="center-state">
+			<div class="spinner-lg"></div>
+			<span class="font-mono">CONNECTING TO ROOM #{battleId}...</span>
 		</div>
-	</div>
-	<h1 class="topic">"{battle.topic}"</h1>
-	<div class="battle-meta font-mono">
-		<span>Ronda {battle.rounds.filter(r => r.winner).length}/{battle.rounds.length}</span>
-		<span>👁 {battle.spectator_count} espectadores</span>
-	</div>
-</div>
+	{:else if error || !battle}
+		<div class="center-state error">
+			<span class="err-icon glow-red">!</span>
+			<p class="font-mono text-alpha">{error || 'ROOM NOT FOUND'}</p>
+			<a href="/" class="btn-outline">← BACK TO LOBBY</a>
+		</div>
+	{:else}
 
-<!-- FIGHTERS + SCORE -->
-<div class="fighters-row">
-	<div class="fighter-card red" class:active={battle.status === 'active' && currentRound && !currentRound.alpha_argument}>
-		<div class="fc-label">Contendiente Alpha</div>
-		<div class="fc-name">{battle.contenders.alpha?.name ?? '—'}</div>
-		<span class="tag tag-red">{battle.contenders.alpha?.stance ?? 'A favor'}</span>
-		{#if battle.final_winner === 'alpha'}
-			<div class="winner-crown">🏆 Ganador</div>
-		{/if}
-	</div>
-
-	<div class="vs-col">
-		<div class="vs-text">VS</div>
-		<div class="score-block">
-			<div class="score-nums">
-				<span style="color:var(--red)">{totalAlpha}</span>
-				<span class="score-sep font-mono">—</span>
-				<span style="color:var(--blue)">{totalBeta}</span>
-			</div>
-			<div class="score-track">
-				<div class="sf-red" style="width:{pctAlpha}%"></div>
-				<div class="sf-blue" style="width:{pctBeta}%"></div>
+	<!-- BATTLE HEADER -->
+	<header class="battle-header stagger-enter" style="animation-delay: 0.1s;">
+		<div class="header-top">
+			<a href="/" class="btn-outline">← LOBBY</a>
+			<div class="status-group">
+				{#if battle.status !== 'finished'}
+					<span class="live-indicator"><span class="live-blink"></span> LIVE</span>
+				{/if}
+				<span class="tag {battle.status === 'active' ? 'tag-green' : battle.status === 'judging' ? 'tag-gold' : 'tag-dim'}">
+					{statusLabel(battle.status)}
+				</span>
+				<span class="room-id font-mono">#{battleId}</span>
 			</div>
 		</div>
-	</div>
+		
+		<h1 class="topic glitch-text">"{battle.topic}"</h1>
+		
+		<div class="battle-meta font-mono">
+			<span class="meta-item">ROUND {battle.rounds.filter(r => r.winner).length}/{battle.rounds.length}</span>
+			<span class="meta-separator">||</span>
+			<span class="meta-item">👁 {battle.spectator_count} SPECS</span>
+		</div>
+	</header>
 
-	<div class="fighter-card blue" class:active={battle.status === 'active' && currentRound?.alpha_argument && !currentRound?.beta_argument}>
-		<div class="fc-label">Contendiente Beta</div>
-		<div class="fc-name">{battle.contenders.beta?.name ?? '—'}</div>
-		<span class="tag tag-blue">{battle.contenders.beta?.stance ?? 'En contra'}</span>
-		{#if battle.final_winner === 'beta'}
-			<div class="winner-crown">🏆 Ganador</div>
-		{/if}
-	</div>
-</div>
-
-<!-- FINAL WINNER BANNER -->
-{#if battle.status === 'finished' && battle.final_winner}
-	<div class="winner-banner" class:winner-draw={battle.final_winner === 'draw'}>
-		<span class="wb-label">Resultado final</span>
-		<span class="wb-winner">
-			{battle.final_winner === 'draw' ? '🤝 Empate' : `🏆 ${winnerName(battle.final_winner)}`}
-		</span>
-	</div>
-{/if}
-
-<!-- ROUNDS HISTORY -->
-{#if battle.rounds.length > 0}
-<section class="rounds-section">
-	<div class="section-label">Historial de rondas</div>
-	{#each battle.rounds.filter(r => r.alpha_argument || r.beta_argument) as r}
-		<div class="round-block">
-			<div class="round-header">
-				<span class="rnum font-mono">Ronda {r.round}</span>
-				{#if r.winner}
-					<span class="tag {r.winner === 'alpha' ? 'tag-red' : r.winner === 'beta' ? 'tag-blue' : 'tag-dim'}">
-						{r.winner === 'draw' ? 'Empate' : `${winnerName(r.winner)} ganó`}
-					</span>
-				{/if}
+	<!-- SCOREBOARD (HUD Style) -->
+	<section class="scoreboard stagger-enter" style="animation-delay: 0.2s;">
+		<div class="score-top">
+			<div class="fighter-info text-alpha" class:active={battle.status === 'active' && currentRound && !currentRound.alpha_argument}>
+				<div class="f-name">{battle.contenders.alpha?.name ?? '—'}</div>
+				<div class="f-stance font-mono">{battle.contenders.alpha?.stance ?? 'PRO'}</div>
+			</div>
+			
+			<div class="score-center font-display">
+				<span class="score-num text-alpha">{totalAlpha}</span>
+				<span class="vs-slash">/</span>
+				<span class="score-num text-beta">{totalBeta}</span>
 			</div>
 
-			<div class="args-grid">
-				{#if r.alpha_argument}
-					<div class="arg-box alpha">
-						<div class="arg-label">Alpha</div>
-						<p class="arg-text">{r.alpha_argument}</p>
-					</div>
-				{/if}
-				{#if r.beta_argument}
-					<div class="arg-box beta">
-						<div class="arg-label">Beta</div>
-						<p class="arg-text">{r.beta_argument}</p>
-					</div>
-				{:else if battle.status === 'active'}
-					<div class="arg-box waiting">
-						<div class="typing-dots">
-							<span></span><span></span><span></span>
+			<div class="fighter-info text-beta align-right" class:active={battle.status === 'active' && currentRound?.alpha_argument && !currentRound?.beta_argument}>
+				<div class="f-name">{battle.contenders.beta?.name ?? '—'}</div>
+				<div class="f-stance font-mono">{battle.contenders.beta?.stance ?? 'CON'}</div>
+			</div>
+		</div>
+		
+		<div class="score-track">
+			<div class="sf-red" style="width:{pctAlpha}%"></div>
+			<div class="sf-blue" style="width:{pctBeta}%"></div>
+		</div>
+
+		{#if battle.status === 'finished' && battle.final_winner}
+			<div class="winner-hud font-display">
+				<span class="wb-label text-muted">FINAL STATUS: </span>
+				<span class="wb-winner {battle.final_winner === 'alpha' ? 'text-alpha' : battle.final_winner === 'beta' ? 'text-beta' : 'text-muted'}">
+					{battle.final_winner === 'draw' ? 'DRAW' : `VICTORY -> ${winnerName(battle.final_winner)}`}
+				</span>
+			</div>
+		{/if}
+	</section>
+
+	<!-- ROUNDS LOG -->
+	{#if battle.rounds.length > 0}
+	<section class="rounds-feed stagger-enter" style="animation-delay: 0.3s;">
+		<div class="feed-header font-mono text-muted">>> TRANSMISSION_LOG</div>
+		
+		{#each battle.rounds.filter(r => r.alpha_argument || r.beta_argument) as r}
+			<article class="round-card">
+				<div class="round-number font-display">RND_{r.round}</div>
+				
+				<div class="split-args">
+					<!-- ALPHA ARGUMENT -->
+					{#if r.alpha_argument}
+						<div class="arg-column alpha-col">
+							<div class="arg-header text-alpha font-mono">[ALPHA_PAYLOAD]</div>
+							<div class="arg-body">{r.alpha_argument}</div>
 						</div>
-						<span class="font-mono waiting-text">Beta elaborando respuesta...</span>
-					</div>
-				{/if}
-			</div>
+					{/if}
+					
+					<!-- BETA ARGUMENT -->
+					{#if r.beta_argument}
+						<div class="arg-column beta-col">
+							<div class="arg-header text-beta font-mono align-right">[BETA_PAYLOAD]</div>
+							<div class="arg-body">{r.beta_argument}</div>
+						</div>
+					{:else if battle.status === 'active'}
+						<div class="arg-column beta-col waiting-col">
+							<div class="arg-header text-beta font-mono align-right">[BETA_PAYLOAD]</div>
+							<div class="typing-indicator">
+								<span class="block bg-beta"></span>
+								<span class="block bg-beta"></span>
+								<span class="block bg-beta"></span>
+								<span class="font-mono text-dim ml-2">AWAITING_INPUT...</span>
+							</div>
+						</div>
+					{/if}
+				</div>
 
-			{#if r.verdict}
-				<div class="verdict-box">
-					<div class="verdict-header">
-						<span class="verdict-icon">⚖</span>
-						<div>
-							<div class="verdict-name">Árbitro · Claude Opus</div>
-							{#if r.scores}
-								<div class="criteria-row">
-									{#each [
-										['Coherencia', r.scores.alpha_coherence, r.scores.beta_coherence],
-										['Evidencia',  r.scores.alpha_evidence,  r.scores.beta_evidence],
-										['Retórica',   r.scores.alpha_rhetoric,  r.scores.beta_rhetoric],
-									] as [label, a, b]}
-										<div class="crit">
-											<span class="crit-label font-mono">{label}</span>
-											<div class="crit-track">
-												<div class="crit-red" style="width:{a}%"></div>
-												<div class="crit-blue" style="width:{b}%"></div>
-											</div>
-											<div class="crit-vals font-mono">
-												<span style="color:var(--red)">{a}</span>
-												<span style="color:var(--blue)">{b}</span>
-											</div>
-										</div>
-									{/each}
-								</div>
+				<!-- JUDGE VERDICT -->
+				{#if r.verdict}
+					<div class="verdict-panel">
+						<div class="verdict-top">
+							<span class="v-title font-mono text-gold">[JUDGE_EVALUATION]</span>
+							{#if r.winner}
+								<span class="tag {r.winner === 'alpha' ? 'tag-red' : r.winner === 'beta' ? 'tag-blue' : 'tag-dim'}">
+									{r.winner === 'draw' ? 'DRAW' : `WINNER: ${winnerName(r.winner)}`}
+								</span>
 							{/if}
 						</div>
-					</div>
-					<p class="verdict-text">{r.verdict}</p>
-				</div>
-			{:else if battle.status === 'judging'}
-				<div class="verdict-box judging">
-					<div class="verdict-icon">⚖</div>
-					<span class="font-mono">Árbitro evaluando argumentos...</span>
-					<div class="spinner-sm"></div>
-				</div>
-			{/if}
-		</div>
-	{/each}
-</section>
-{/if}
+						
+						<div class="verdict-body font-mono text-muted">
+							{r.verdict}
+						</div>
 
-<!-- QR + SHARE -->
-<div class="share-bar">
-	<div class="share-left">
-		<span class="share-label font-mono">Comparte esta batalla</span>
-		<span class="share-url font-mono">{typeof window !== 'undefined' ? window.location.href : ''}</span>
-	</div>
-	<div class="qr-area">
-		{#if qrUrl}
-			<img src={qrUrl} alt="QR code" class="qr-img" width="80" height="80" />
-		{/if}
-		<div class="qr-info font-mono">
-			<span>Escanea para ver</span>
-			<span class="room-tag">#{battleId}</span>
+						{#if r.scores}
+							<div class="criteria-grid">
+								{#each [
+									{ label: 'COHERENCE', a: r.scores.alpha_coherence, b: r.scores.beta_coherence },
+									{ label: 'EVIDENCE',  a: r.scores.alpha_evidence,  b: r.scores.beta_evidence },
+									{ label: 'RHETORIC',  a: r.scores.alpha_rhetoric,  b: r.scores.beta_rhetoric }
+								] as { label, a, b }}
+									<div class="crit-row">
+										<!-- Alpha Score -->
+										<span class="crit-val font-mono text-alpha">{a}</span>
+										<!-- Progress bar -->
+										<div class="crit-bar-wrapper">
+											<div class="crit-label font-mono">{label}</div>
+											<div class="crit-bar">
+												<div class="cb-alpha" style="width:{(a/(a+b))*100}%"></div>
+												<div class="cb-beta" style="width:{(b/(a+b))*100}%"></div>
+											</div>
+										</div>
+										<!-- Beta Score -->
+										<span class="crit-val font-mono text-beta">{b}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{:else if battle.status === 'judging'}
+					<div class="verdict-panel judging-panel">
+						<span class="v-title font-mono text-gold">[JUDGE_EVALUATION]</span>
+						<div class="typing-indicator">
+							<span class="block bg-gold"></span>
+							<span class="font-mono text-gold ml-2">PROCESSING_VERDICT...</span>
+						</div>
+					</div>
+				{/if}
+			</article>
+		{/each}
+	</section>
+	{/if}
+
+	<!-- QR + SHARE -->
+	<footer class="share-footer stagger-enter" style="animation-delay: 0.4s;">
+		<div class="share-info">
+			<span class="font-mono text-dim">> SHARE_LINK:</span>
+			<a href={typeof window !== 'undefined' ? window.location.href : '#'} class="font-mono text-beta">{typeof window !== 'undefined' ? window.location.href : ''}</a>
 		</div>
-	</div>
+		{#if qrUrl}
+			<div class="qr-wrapper">
+				<img src={qrUrl} alt="QR" class="qr-img" width="60" height="60" />
+			</div>
+		{/if}
+	</footer>
+
+	{/if}
 </div>
 
-{/if}
-
 <style>
-.center-state {
-	display: flex; flex-direction: column; align-items: center;
-	justify-content: center; min-height: 40vh; gap: 1rem;
-	font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-muted);
+/* ── CONTAINERS ── */
+.debate-container {
+	animation: fadeUp 0.5s ease both;
+	max-width: 1200px;
+	margin: 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 3rem;
 }
-.center-state.error { color: var(--red); }
-.err-icon { font-size: 2rem; }
+
+.center-state {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	min-height: 50vh; gap: 1.5rem; letter-spacing: 2px;
+}
 .spinner-lg {
-	width: 32px; height: 32px;
-	border: 2px solid var(--border-bright); border-top-color: var(--red);
-	border-radius: 50%; animation: spin 0.8s linear infinite;
+	width: 40px; height: 40px;
+	border: 2px dashed var(--border-bright); border-top-color: var(--beta-neon);
+	border-radius: 50%; animation: spin 1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.back-link {
-	font-family: var(--font-mono); font-size: 0.75rem;
-	color: var(--text-muted); letter-spacing: 1px; transition: color 0.15s;
-}
-.back-link:hover { color: var(--text); }
 
-.battle-header { margin-bottom: 2rem; animation: fadeUp 0.5s ease both; }
+/* ── BUTTONS & UTILS ── */
+.btn-outline {
+	font-family: var(--font-mono); font-weight: 700; font-size: 0.7rem;
+	letter-spacing: 2px; text-transform: uppercase; padding: 0.5rem 1rem;
+	border: 1px solid var(--border-bright); color: var(--text-muted);
+	background: rgba(255,255,255,0.02); transition: all 0.2s;
+}
+.btn-outline:hover { color: var(--text); border-color: var(--text); background: var(--surface2); }
+.text-gold { color: var(--gold); }
+.bg-gold { background-color: var(--gold); }
+.bg-beta { background-color: var(--beta-neon); }
+.align-right { text-align: right; }
+.ml-2 { margin-left: 0.5rem; }
+
+/* ── HEADER ── */
+.battle-header {
+	border-bottom: 1px solid var(--border);
+	padding-bottom: 2rem;
+}
 .header-top {
 	display: flex; align-items: center; justify-content: space-between;
-	margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;
+	margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;
 }
-.status-group { display: flex; align-items: center; gap: 0.75rem; }
+.status-group { display: flex; align-items: center; gap: 1rem; }
 .live-indicator {
-	display: flex; align-items: center; gap: 5px;
-	font-family: var(--font-mono); font-size: 0.7rem;
-	color: var(--green); letter-spacing: 1px;
+	display: flex; align-items: center; gap: 8px;
+	font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem;
+	color: var(--green); letter-spacing: 2px;
 }
-.live-dot {
-	width: 6px; height: 6px; border-radius: 50%;
-	background: var(--green); animation: pulse 1.2s ease infinite;
+.live-blink {
+	width: 8px; height: 8px; background: var(--green);
+	box-shadow: 0 0 10px var(--green); animation: pulse-neon 1s infinite alternate;
 }
-.room-id { font-size: 0.7rem; color: var(--text-dim); letter-spacing: 1px; }
 .topic {
-	font-family: var(--font-display); font-weight: 900;
-	font-size: clamp(1.4rem, 3.5vw, 2.2rem);
-	color: var(--text); margin-bottom: 0.5rem; font-style: italic;
+	font-family: var(--font-display); font-weight: 700;
+	font-size: clamp(2rem, 5vw, 4rem); line-height: 1.1;
+	color: var(--text); margin-bottom: 1.5rem; text-transform: uppercase;
 }
 .battle-meta {
-	display: flex; gap: 1.5rem;
-	font-size: 0.72rem; color: var(--text-muted); letter-spacing: 1px;
+	display: flex; align-items: center; gap: 1rem;
+	font-size: 0.8rem; color: var(--text-muted); letter-spacing: 2px;
+}
+.meta-separator { color: var(--border-bright); }
+
+/* ── SCOREBOARD (HUD) ── */
+.scoreboard {
+	background: rgba(255,255,255,0.02);
+	border: 1px solid var(--border);
+	padding: 2rem;
+	position: relative;
+}
+.score-top {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 2rem;
+	margin-bottom: 1.5rem;
+}
+.fighter-info { display: flex; flex-direction: column; gap: 4px; transition: all 0.3s; opacity: 0.6; }
+.fighter-info.active { opacity: 1; filter: drop-shadow(0 0 10px currentColor); }
+.fighter-info .f-name { font-family: var(--font-display); font-size: 1.5rem; letter-spacing: 1px; }
+.fighter-info .f-stance { font-size: 0.75rem; letter-spacing: 2px; }
+
+.score-center {
+	display: flex; align-items: center; gap: 1rem;
+	font-size: 4rem; line-height: 1;
+}
+.vs-slash { font-family: var(--font-mono); font-size: 2rem; color: var(--border-bright); font-weight: 400; }
+
+.score-track { height: 8px; background: var(--surface2); display: flex; box-shadow: inset 0 0 5px #000; }
+.sf-red { height: 100%; background: var(--alpha-neon); transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 15px var(--alpha-dim); }
+.sf-blue { height: 100%; background: var(--beta-neon); transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 15px var(--beta-dim); margin-left: auto; }
+
+.winner-hud {
+	margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-bright);
+	text-align: center; font-size: 1.25rem; letter-spacing: 4px;
 }
 
-.fighters-row {
-	display: grid; grid-template-columns: 1fr 140px 1fr;
-	gap: 1rem; margin-bottom: 1.5rem; animation: fadeUp 0.5s 0.08s ease both;
-}
-.fighter-card {
-	background: var(--surface); border: 1px solid var(--border);
-	border-radius: 4px; padding: 1.25rem; position: relative;
-	overflow: hidden; transition: border-color 0.3s, box-shadow 0.3s;
-}
-.fighter-card::before {
-	content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-}
-.fighter-card.red::before { background: var(--red); }
-.fighter-card.blue::before { background: var(--blue); }
-.fighter-card.active.red { border-color: var(--red); box-shadow: 0 0 18px rgba(255,49,49,0.08); }
-.fighter-card.active.blue { border-color: var(--blue); box-shadow: 0 0 18px rgba(41,121,255,0.08); }
-.fc-label {
-	font-family: var(--font-display); font-weight: 700; font-size: 0.65rem;
-	letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.4rem;
-}
-.fc-name {
-	font-family: var(--font-display); font-weight: 900; font-size: 1.5rem;
-	letter-spacing: 1px; text-transform: uppercase; color: var(--text); margin-bottom: 0.6rem;
-}
-.winner-crown { margin-top: 0.75rem; font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; color: var(--gold); }
+/* ── ROUNDS FEED ── */
+.rounds-feed { display: flex; flex-direction: column; gap: 3rem; }
+.feed-header { letter-spacing: 4px; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: -1rem;}
 
-.vs-col { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; }
-.vs-text { font-family: var(--font-display); font-weight: 900; font-size: 2.2rem; color: var(--text-dim); letter-spacing: 3px; }
-.score-block { width: 100%; }
-.score-nums {
+.round-card {
+	position: relative;
+	border-left: 2px solid var(--border);
+	padding-left: 2rem;
+}
+.round-number {
+	position: absolute; left: -2rem; top: 0;
+	background: var(--bg); padding-right: 1rem;
+	font-size: 1.2rem; color: var(--text); font-weight: 700;
+}
+
+/* Split Args */
+.split-args {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 2rem;
+	margin-top: 2rem;
+	margin-bottom: 2rem;
+}
+.arg-column {
+	background: rgba(255,255,255,0.01);
+	border: 1px solid var(--border);
+	padding: 1.5rem;
+}
+.alpha-col { border-top: 2px solid var(--alpha-neon); }
+.beta-col { border-top: 2px solid var(--beta-neon); }
+.arg-header { font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 1rem; opacity: 0.8; }
+.arg-body { font-size: 0.95rem; line-height: 1.7; color: var(--text); }
+.waiting-col { display: flex; flex-direction: column; justify-content: space-between; min-height: 150px;}
+
+.typing-indicator { display: flex; align-items: center; gap: 6px; }
+.typing-indicator .block {
+	width: 8px; height: 14px;
+	animation: blink 1s step-end infinite;
+}
+.typing-indicator .block:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator .block:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* Verdict Panel */
+.verdict-panel {
+	background: rgba(255, 190, 11, 0.05); /* gold dim */
+	border: 1px solid rgba(255, 190, 11, 0.2);
+	border-left: 4px solid var(--gold);
+	padding: 1.5rem;
+}
+.judging-panel { display: flex; flex-direction: column; gap: 1rem; }
+.verdict-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.v-title { font-size: 0.8rem; letter-spacing: 2px; }
+.verdict-body { font-size: 0.85rem; line-height: 1.8; margin-bottom: 1.5rem; color: #ccc; }
+
+.criteria-grid { display: flex; flex-direction: column; gap: 1rem; max-width: 600px; margin: 0 auto; }
+.crit-row { display: flex; align-items: center; gap: 1rem; }
+.crit-val { font-size: 0.9rem; font-weight: 700; width: 30px; text-align: center;}
+.crit-bar-wrapper { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.crit-label { text-align: center; font-size: 0.65rem; color: var(--text-dim); letter-spacing: 2px; }
+.crit-bar { height: 4px; display: flex; background: var(--surface2); }
+.cb-alpha { background: var(--alpha-neon); height: 100%; box-shadow: 0 0 5px var(--alpha-dim);}
+.cb-beta { background: var(--beta-neon); height: 100%; box-shadow: 0 0 5px var(--beta-dim);}
+
+/* ── SHARE ── */
+.share-footer {
+	margin-top: 2rem; padding: 2rem;
+	background: var(--surface); border: 1px dashed var(--border-bright);
 	display: flex; justify-content: space-between; align-items: center;
-	font-family: var(--font-display); font-weight: 900; font-size: 1.6rem; margin-bottom: 6px;
 }
-.score-sep { font-size: 0.8rem; color: var(--text-dim); }
-.score-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; display: flex; }
-.sf-red { height: 100%; background: var(--red); transition: width 0.8s ease; }
-.sf-blue { height: 100%; background: var(--blue); transition: width 0.8s ease; margin-left: auto; }
+.share-info { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.8rem; }
+.qr-img { border: 2px solid var(--border-bright); padding: 4px; background: #fff;}
 
-.winner-banner {
-	background: var(--gold-dim); border: 1px solid rgba(245,200,66,0.3);
-	border-radius: 4px; padding: 1.25rem 1.5rem;
-	display: flex; align-items: center; gap: 1.5rem;
-	margin-bottom: 1.5rem; animation: fadeUp 0.5s ease both;
-}
-.winner-banner.winner-draw { background: var(--surface2); border-color: var(--border-bright); }
-.wb-label { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
-.wb-winner { font-family: var(--font-display); font-weight: 900; font-size: 1.5rem; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
-
-.rounds-section { margin-bottom: 2rem; animation: fadeUp 0.5s 0.15s ease both; }
-.section-label {
-	font-family: var(--font-display); font-weight: 700; font-size: 0.7rem;
-	letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 1rem;
-}
-.round-block { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem; margin-bottom: 0.75rem; }
-.round-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
-.rnum { font-size: 0.7rem; color: var(--text-dim); letter-spacing: 1px; }
-.args-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-.arg-box { background: var(--surface2); border-radius: 3px; padding: 0.75rem; }
-.arg-box.waiting { display: flex; align-items: center; gap: 0.75rem; }
-.waiting-text { font-size: 0.72rem; color: var(--text-dim); }
-.arg-label { font-family: var(--font-display); font-weight: 700; font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
-.arg-box.alpha .arg-label { color: var(--red); }
-.arg-box.beta .arg-label { color: var(--blue); }
-.arg-text { font-size: 0.85rem; color: var(--text); line-height: 1.6; }
-
-.typing-dots { display: flex; gap: 3px; align-items: center; }
-.typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim); animation: bounce 1.2s infinite; }
-.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce {
-	0%,60%,100% { transform: translateY(0); opacity: 0.35; }
-	30% { transform: translateY(-4px); opacity: 1; }
-}
-
-.verdict-box {
-	background: var(--gold-dim); border: 1px solid rgba(245,200,66,0.2);
-	border-left: 3px solid var(--gold); border-radius: 3px; padding: 1rem;
-}
-.verdict-box.judging { display: flex; align-items: center; gap: 1rem; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
-.spinner-sm { width: 14px; height: 14px; border: 1.5px solid var(--border-bright); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.verdict-header { display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 0.75rem; }
-.verdict-icon { font-size: 1.1rem; padding-top: 2px; }
-.verdict-name { font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); margin-bottom: 0.4rem; }
-.criteria-row { display: flex; gap: 1rem; flex-wrap: wrap; }
-.crit { display: flex; align-items: center; gap: 6px; }
-.crit-label { font-size: 0.62rem; color: var(--text-dim); letter-spacing: 0.5px; }
-.crit-track { width: 60px; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; display: flex; }
-.crit-red { height: 100%; background: var(--red); }
-.crit-blue { height: 100%; background: var(--blue); margin-left: auto; }
-.crit-vals { display: flex; gap: 4px; font-size: 0.62rem; }
-.verdict-text { font-size: 0.875rem; color: var(--text); line-height: 1.65; font-style: italic; }
-
-.share-bar {
-	background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
-	padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between;
-	gap: 1.5rem; flex-wrap: wrap; animation: fadeUp 0.5s 0.2s ease both;
-}
-.share-left { display: flex; flex-direction: column; gap: 4px; }
-.share-label { font-size: 0.65rem; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
-.share-url { font-size: 0.72rem; color: var(--blue); letter-spacing: 0.5px; }
-.qr-area { display: flex; align-items: center; gap: 0.75rem; }
-.qr-img { border-radius: 3px; }
-.qr-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.65rem; color: var(--text-dim); }
-.room-tag { color: var(--gold); }
-
-@media (max-width: 640px) {
-	.fighters-row { grid-template-columns: 1fr; }
-	.vs-col { flex-direction: row; padding: 0.5rem 0; }
-	.args-grid { grid-template-columns: 1fr; }
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+	.score-top { grid-template-columns: 1fr; text-align: center; gap: 1rem; }
+	.fighter-info .f-name { font-size: 1.25rem; }
+	.align-right { text-align: center; }
+	.split-args { grid-template-columns: 1fr; gap: 1rem; }
+	.share-footer { flex-direction: column; gap: 2rem; text-align: center; }
+	.topic { font-size: 2.5rem; }
 }
 </style>
