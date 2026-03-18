@@ -2,7 +2,7 @@ import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import type { Battle, Contender, Round, RoundScores, BattleStatus, RoundWinner } from "../types.js";
+import type { Battle, Contender, Round, RoundScores, BattleStatus, RoundWinner, GameMode, ChessGameState, ContenderSide } from "../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
@@ -40,6 +40,7 @@ function initSchema(db: SqlJsDatabase): void {
     CREATE TABLE IF NOT EXISTS battles (
       id              TEXT PRIMARY KEY,
       topic           TEXT NOT NULL,
+      game_mode       TEXT NOT NULL DEFAULT 'debate',
       status          TEXT NOT NULL DEFAULT 'waiting',
       max_rounds      INTEGER NOT NULL DEFAULT 3,
       current_round   INTEGER NOT NULL DEFAULT 0,
@@ -78,6 +79,16 @@ function initSchema(db: SqlJsDatabase): void {
       beta_total      INTEGER NOT NULL DEFAULT 0,
       completed_at    TEXT,
       PRIMARY KEY (battle_id, round_number),
+      FOREIGN KEY (battle_id) REFERENCES battles(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chess_games (
+      battle_id    TEXT PRIMARY KEY,
+      fen          TEXT NOT NULL,
+      pgn          TEXT NOT NULL DEFAULT '',
+      moves_json   TEXT NOT NULL DEFAULT '[]',
+      last_side    TEXT,
+      updated_at   TEXT NOT NULL,
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
   `);
@@ -149,6 +160,7 @@ function assembleBattle(
   return {
     id: row["id"] as string,
     topic: row["topic"] as string,
+    game_mode: (row["game_mode"] as GameMode) ?? "debate",
     status: row["status"] as BattleStatus,
     max_rounds: row["max_rounds"] as number,
     current_round: row["current_round"] as number,
@@ -160,18 +172,19 @@ function assembleBattle(
     alpha: contenders["alpha"],
     beta: contenders["beta"],
     rounds,
+    chess: undefined, // populated by getBattle if game_mode === "chess"
   };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function createBattle(id: string, topic: string, maxRounds: number): Promise<Battle> {
+export async function createBattle(id: string, topic: string, maxRounds: number, gameMode: GameMode = "debate"): Promise<Battle> {
   const db = await getDb();
   const now = new Date().toISOString();
   run(db, `
-    INSERT INTO battles (id, topic, status, max_rounds, current_round, spectator_count, created_at)
-    VALUES (?, ?, 'waiting', ?, 0, 0, ?)
-  `, [id, topic, maxRounds, now]);
+    INSERT INTO battles (id, topic, game_mode, status, max_rounds, current_round, spectator_count, created_at)
+    VALUES (?, ?, ?, 'waiting', ?, 0, 0, ?)
+  `, [id, topic, gameMode, maxRounds, now]);
   return (await getBattle(id))!;
 }
 
@@ -181,7 +194,31 @@ export async function getBattle(id: string): Promise<Battle | null> {
   if (!row) return null;
   const contenderRows = queryAll<Record<string, unknown>>(db, "SELECT * FROM contenders WHERE battle_id = ?", [id]);
   const roundRows = queryAll<Record<string, unknown>>(db, "SELECT * FROM rounds WHERE battle_id = ? ORDER BY round_number", [id]);
-  return assembleBattle(row, contenderRows, roundRows);
+  const battle = assembleBattle(row, contenderRows, roundRows);
+
+  // Load chess state if applicable
+  if (battle.game_mode === "chess") {
+    const chessRow = queryOne<Record<string, unknown>>(db, "SELECT * FROM chess_games WHERE battle_id = ?", [id]);
+    if (chessRow) {
+      battle.chess = {
+        fen: chessRow["fen"] as string,
+        pgn: chessRow["pgn"] as string,
+        moves: JSON.parse((chessRow["moves_json"] as string) ?? "[]"),
+        turn: (chessRow["fen"] as string).includes(" w ") ? "white" : "black",
+        side_to_move: "alpha",
+        is_check: false,
+        is_checkmate: false,
+        is_draw: false,
+        legal_moves: [],
+        move_count: 0,
+      };
+      // Rebuild live state from moves for accurate game status
+      const { rebuildFromMoves } = await import("./chess-engine.js");
+      battle.chess = rebuildFromMoves(battle.chess.moves);
+    }
+  }
+
+  return battle;
 }
 
 export async function listActiveBattles(): Promise<Battle[]> {
@@ -281,6 +318,37 @@ export async function archiveOldBattles(): Promise<number> {
   if (before.length === 0) return 0;
   run(db, "DELETE FROM rounds WHERE battle_id IN (SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?)", [cutoff]);
   run(db, "DELETE FROM contenders WHERE battle_id IN (SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?)", [cutoff]);
+  run(db, "DELETE FROM chess_games WHERE battle_id IN (SELECT id FROM battles WHERE status = 'finished' AND finished_at < ?)", [cutoff]);
   run(db, "DELETE FROM battles WHERE status = 'finished' AND finished_at < ?", [cutoff]);
   return before.length;
+}
+
+// ─── Chess game persistence ───────────────────────────────────────────────────
+
+export async function getChessGame(battleId: string): Promise<ChessGameState | null> {
+  const db = await getDb();
+  const row = queryOne<Record<string, unknown>>(db, "SELECT * FROM chess_games WHERE battle_id = ?", [battleId]);
+  if (!row) return null;
+  const { rebuildFromMoves } = await import("./chess-engine.js");
+  const moves = JSON.parse((row["moves_json"] as string) ?? "[]");
+  return rebuildFromMoves(moves);
+}
+
+export async function saveChessMove(
+  battleId: string,
+  state: ChessGameState,
+  lastSide: ContenderSide | null
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  run(db, `
+    INSERT INTO chess_games (battle_id, fen, pgn, moves_json, last_side, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(battle_id) DO UPDATE SET
+      fen = excluded.fen,
+      pgn = excluded.pgn,
+      moves_json = excluded.moves_json,
+      last_side = excluded.last_side,
+      updated_at = excluded.updated_at
+  `, [battleId, state.fen, state.pgn, JSON.stringify(state.moves), lastSide, now]);
 }

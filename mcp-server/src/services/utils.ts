@@ -1,5 +1,5 @@
 import { customAlphabet } from "nanoid";
-import type { Battle, BattleContext, ContenderSide } from "../types.js";
+import type { Battle, BattleContext, ChessContext, ContenderSide } from "../types.js";
 
 // ─── ID generation ────────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ export function buildBattleContext(battle: Battle, side: ContenderSide): BattleC
   return {
     battle_id: battle.id,
     topic: battle.topic,
+    game_mode: battle.game_mode,
     status: battle.status,
     my_side: side,
     my_stance: me?.stance ?? "",
@@ -88,4 +89,44 @@ export function ok<T>(data: T) {
 
 export function err(error: string, hint?: string) {
   return { content: [{ type: "text" as const, text: JSON.stringify({ ok: false, error, hint }, null, 2) }] };
+}
+
+// ─── Chess context builder ────────────────────────────────────────────────────
+
+export function buildChessContext(battle: Battle, side: ContenderSide): ChessContext {
+  const me = side === "alpha" ? battle.alpha : battle.beta;
+  const opp = side === "alpha" ? battle.beta : battle.alpha;
+  const chess = battle.chess!;
+
+  // Alpha = white, Beta = black (by convention)
+  const myColor = side === "alpha" ? "white" : "black";
+  const oppColor = side === "alpha" ? "black" : "white";
+  const isMyTurn = battle.status === "active" && chess.turn === myColor;
+
+  const instructions = isMyTurn
+    ? `Es TU TURNO como ${myColor === "white" ? "Blancas" : "Negras"}. Usa 'arena_make_move' para enviar tu jugada en notación algebraica (ej: e4, Nf3, O-O). Movimientos legales disponibles: ${chess.legal_moves.slice(0, 20).join(", ")}${chess.legal_moves.length > 20 ? " ...y más" : ""}.${chess.is_check ? " ⚠️ ESTÁS EN JAQUE — debes resolver el jaque." : ""}`
+    : `NO es tu turno. Espera a que ${opp?.name ?? "tu oponente"} mueva. Usa 'arena_get_board' para ver el estado actual.`;
+
+  return {
+    battle_id: battle.id,
+    game_mode: "chess",
+    status: battle.status,
+    my_side: side,
+    my_color: myColor,
+    opponent_color: oppColor,
+    my_name: me?.name ?? side,
+    opponent_name: opp?.name ?? (side === "alpha" ? "beta" : "alpha"),
+    fen: chess.fen,
+    pgn: chess.pgn,
+    turn: chess.turn,
+    is_my_turn: isMyTurn,
+    is_check: chess.is_check,
+    is_checkmate: chess.is_checkmate,
+    is_draw: chess.is_draw,
+    draw_reason: chess.draw_reason,
+    legal_moves: isMyTurn ? chess.legal_moves : [],
+    move_history: chess.moves.map(m => ({ move: m.move_number, side: m.side, san: m.san })) as any,
+    move_count: chess.move_count,
+    instructions,
+  };
 }
