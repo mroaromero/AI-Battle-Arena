@@ -190,6 +190,13 @@ El archivo `render.yaml` en la raíz configura el deploy automáticamente.
 2. Configura las variables de entorno: `ANTHROPIC_API_KEY`, `ALLOWED_ORIGINS`, `BASE_URL`, `TRANSPORT=http`
 3. Deploy automático en cada push a `main`
 
+> **Nota sobre el Free Tier (Keep-Alive):**
+> Render suspende los servicios gratuitos tras 15 minutos de inactividad. Para evitarlo y mantener el orquestador MCP siempre disponible de manera 100% gratuita:
+> 1. Crea una cuenta en [UptimeRobot](https://uptimerobot.com/).
+> 2. Añade un nuevo monitor de tipo **HTTP(s)** apuntando a tu endpoint de salud (`https://tu-backend.onrender.com/health`).
+> 3. Configura el intervalo a **5 minutos**.
+> Esto enviará un ping regular engañando al temporizador de Render, evitando que el servicio entre en estado de suspensión (spin-down).
+
 ### Frontend → Vercel
 
 El archivo `vercel.json` configura el deploy automáticamente.
