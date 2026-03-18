@@ -4,75 +4,92 @@
 
 @layer base {
   :root {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
-    
-    /* Neon Colors - Cyberpunk Vibe */
-    --primary: 180 100% 50%; /* Cyan Neon */
-    --primary-foreground: 240 10% 4%; /* Dark text for primary */
-    --secondary: 320 100% 50%; /* Magenta Neon */
-    --secondary-foreground: 0 0% 98%; /* White text */
-    
-    --border: 240 10% 15%;
-    --muted: 240 10% 8%;
-    --muted-foreground: 240 5% 65%;
-    
-    /* Indicators */
-    --destructive: 0 100% 55%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 130 100% 45%;
-    --success-foreground: 0 0% 98%;
-    
-    --radius: 0.25rem;
+	--bg: #040405;            /* Void Black */
+	--surface: #0a0a0d;       /* Deep Surface */
+	--surface2: #121216;      /* Elevated Surface */
+	--border-color: rgba(255, 255, 255, 0.08);
+	--border-bright: rgba(255, 255, 255, 0.2);
+	
+	/* Accent Colors */
+	--alpha-neon: #ff0f39;    /* Neon Crimson */
+	--alpha-dim: rgba(255, 15, 57, 0.12);
+	
+	--beta-neon: #0ff0ff;     /* Electric Blue */
+	--beta-dim: rgba(15, 240, 255, 0.12);
+	
+	--gold: #ffbe0b;          /* Arcade Gold */
+	--gold-dim: rgba(255, 190, 11, 0.1);
+	
+	--green: #39ff14;         /* Matrix Green */
+	
+	/* Typography */
+	--text: #ffffff;
+	--text-muted: rgba(255, 255, 255, 0.55);
+	--text-dim: rgba(255, 255, 255, 0.25);
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
-  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
-    /* Ominous Deep Grid Background */
-    background-image: 
-      linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    background-position: center top;
-    background-attachment: fixed;
+	background: var(--bg);
+	color: var(--text);
+	min-height: 100vh;
+	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden;
   }
-  
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Rajdhani', sans-serif;
+
+  /* Hardcore Noise Overlay */
+  body::after {
+	content: '';
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: 9999;
+	opacity: 0.35;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
   }
-  
-  /* Reticle / HUD accents */
+
+  /* Subtle Grid Background */
+  body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	background-size: 40px 40px;
+	background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+					  linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+	mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+	-webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+  }
+
   ::selection {
-    @apply bg-primary/30 text-white;
+	background-color: var(--alpha-neon);
+	color: #000;
   }
 }
 
 @layer utilities {
-  .text-glow {
-    text-shadow: 0 0 10px hsl(var(--primary) / 0.6), 0 0 20px hsl(var(--primary) / 0.3);
+  .glitch-text:hover {
+	animation: glitch 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+	color: var(--alpha-neon);
   }
-  .text-glow-secondary {
-    text-shadow: 0 0 10px hsl(var(--secondary) / 0.6), 0 0 20px hsl(var(--secondary) / 0.3);
-  }
-  .box-glow {
-    box-shadow: 0 0 15px hsl(var(--primary) / 0.2), inset 0 0 10px hsl(var(--primary) / 0.1);
-  }
-  .glass-panel {
-    @apply bg-black/60 backdrop-blur-xl border border-white/10;
-  }
-  .glass-panel-accent {
-    @apply bg-background/80 backdrop-blur-md border border-primary/40;
-  }
-  /* Decorative corner cuts for HUD elements */
-  .hud-corners {
-    position: relative;
-    clip-path: polygon(
-      0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%
-    );
-  }
+}
+
+@keyframes glitch {
+  0% { transform: translate(0) }
+  20% { transform: translate(-2px, 2px) }
+  40% { transform: translate(-2px, -2px) }
+  60% { transform: translate(2px, 2px) }
+  80% { transform: translate(2px, -2px) }
+  100% { transform: translate(0) }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.stagger-enter {
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

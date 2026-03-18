@@ -4,33 +4,32 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Outfit', 'sans-serif'],
-        display: ['Rajdhani', 'sans-serif'],
+        sans: ['"Space Grotesk"', 'sans-serif'],
+        display: ['Syncopate', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
       },
       colors: {
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        border: 'hsl(var(--border))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))',
+        bg: 'var(--bg)',
+        surface: 'var(--surface)',
+        surface2: 'var(--surface2)',
+        border: 'var(--border-color)',
+        borderBright: 'var(--border-bright)',
+        alpha: {
+          DEFAULT: 'var(--alpha-neon)',
+          dim: 'var(--alpha-dim)'
         },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))',
+        beta: {
+          DEFAULT: 'var(--beta-neon)',
+          dim: 'var(--beta-dim)'
         },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
+        gold: {
+          DEFAULT: 'var(--gold)',
+          dim: 'var(--gold-dim)'
         },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        success: {
-          DEFAULT: 'hsl(var(--success))',
-          foreground: 'hsl(var(--success-foreground))',
-        }
+        green: 'var(--green)',
+        text: 'var(--text)',
+        textMuted: 'var(--text-muted)',
+        textDim: 'var(--text-dim)'
       }
     }
   },
