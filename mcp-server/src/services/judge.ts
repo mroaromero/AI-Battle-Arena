@@ -18,7 +18,7 @@ export async function judgeRound(
   alphaArgument: string,
   betaArgument: string
 ): Promise<JudgeOutput> {
-  const provider = createJudgeProvider();
+  const provider = await createJudgeProvider();
 
   if (!provider) {
     return mockJudge(alphaArgument, betaArgument, roundNumber);

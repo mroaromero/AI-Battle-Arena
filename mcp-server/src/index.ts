@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import { registerAllTools } from "./tools/battle.js";
 import { startCleanupJob } from "./services/cleanup.js";
+import { getAllSettings, setSetting } from "./services/db.js";
 
 // ─── Server initialization ────────────────────────────────────────────────────
 
@@ -44,6 +45,52 @@ async function runHTTP(): Promise<void> {
   // ── Health check ─────────────────────────────────────────────────────────────────
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", server: "battle-arena-mcp", version: "2.0.0" });
+  });
+
+  // ── Admin API ────────────────────────────────────────────────────────────────────
+  const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    const adminSecret = process.env.ADMIN_SECRET;
+    
+    if (!adminSecret) {
+      // We must explicitly `return` so TypeScript knows we end execution here for this route.
+      res.status(500).json({ error: "ADMIN_SECRET not configured on server" });
+      return;
+    }
+    
+    if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    
+    next();
+  };
+
+  app.get("/admin/config", adminAuth, async (_req, res) => {
+    const settings = await getAllSettings();
+    // Mask API keys so they are not exposed in plaintext over the wire
+    const maskedSettings = { ...settings };
+    const maskKey = (key: string) => {
+      if (maskedSettings[key] && maskedSettings[key].length > 8) {
+        maskedSettings[key] = maskedSettings[key].substring(0, 8) + "...****";
+      }
+    };
+    maskKey("ANTHROPIC_API_KEY");
+    maskKey("OPENROUTER_API_KEY");
+    maskKey("GROQ_API_KEY");
+    
+    res.json(maskedSettings);
+  });
+
+  app.post("/admin/config", adminAuth, async (req, res) => {
+    const settingsToUpdate = req.body as Record<string, string>;
+    for (const [key, value] of Object.entries(settingsToUpdate)) {
+      // Avoid saving placeholder masked keys back to the DB
+      if (value && !value.includes("...****")) {
+        await setSetting(key, value);
+      }
+    }
+    res.json({ success: true });
   });
 
   // ── MCP Discovery endpoint (spec 2025-06-18) ────────────────────────────

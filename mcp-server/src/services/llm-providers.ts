@@ -2,6 +2,8 @@
 // Allows the judge to use Anthropic, OpenRouter, or Groq interchangeably.
 // OpenRouter and Groq both use the OpenAI Chat Completions API format.
 
+import { getAllSettings } from "./db.js";
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -92,20 +94,21 @@ class OpenAICompatibleProvider implements LLMProvider {
 }
 
 // ─── Provider factory ─────────────────────────────────────────────────────────
-// Priority: JUDGE_PROVIDER env var → auto-detect by available API keys.
+// Priority: local DB config → environment variables.
 // Cascade: configured provider → Anthropic → OpenRouter → Groq → mock
 
-const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY ?? "";
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? "";
-const GROQ_KEY       = process.env.GROQ_API_KEY ?? "";
-const JUDGE_PROVIDER = (process.env.JUDGE_PROVIDER ?? "auto").toLowerCase();
+export async function createJudgeProvider(): Promise<LLMProvider | null> {
+  const settings = await getAllSettings();
 
-// Model defaults per provider (can be overridden via env vars)
-const ANTHROPIC_MODEL   = process.env.JUDGE_MODEL_ANTHROPIC   ?? "claude-opus-4-5";
-const OPENROUTER_MODEL  = process.env.JUDGE_MODEL_OPENROUTER  ?? "google/gemini-2.0-flash-001";
-const GROQ_MODEL        = process.env.JUDGE_MODEL_GROQ        ?? "llama-3.3-70b-versatile";
+  const ANTHROPIC_KEY  = settings["ANTHROPIC_API_KEY"] ?? process.env.ANTHROPIC_API_KEY ?? "";
+  const OPENROUTER_KEY = settings["OPENROUTER_API_KEY"] ?? process.env.OPENROUTER_API_KEY ?? "";
+  const GROQ_KEY       = settings["GROQ_API_KEY"] ?? process.env.GROQ_API_KEY ?? "";
+  const JUDGE_PROVIDER = (settings["JUDGE_PROVIDER"] ?? process.env.JUDGE_PROVIDER ?? "auto").toLowerCase();
 
-export function createJudgeProvider(): LLMProvider | null {
+  const ANTHROPIC_MODEL   = settings["JUDGE_MODEL_ANTHROPIC"]  ?? process.env.JUDGE_MODEL_ANTHROPIC   ?? "claude-opus-4-5";
+  const OPENROUTER_MODEL  = settings["JUDGE_MODEL_OPENROUTER"] ?? process.env.JUDGE_MODEL_OPENROUTER  ?? "google/gemini-2.0-flash-001";
+  const GROQ_MODEL        = settings["JUDGE_MODEL_GROQ"]       ?? process.env.JUDGE_MODEL_GROQ        ?? "llama-3.3-70b-versatile";
+
   const explicit = JUDGE_PROVIDER !== "auto";
 
   // Explicit selection

@@ -91,6 +91,11 @@ function initSchema(db: SqlJsDatabase): void {
       updated_at   TEXT NOT NULL,
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
   persist(db);
 }
@@ -351,4 +356,31 @@ export async function saveChessMove(
       last_side = excluded.last_side,
       updated_at = excluded.updated_at
   `, [battleId, state.fen, state.pgn, JSON.stringify(state.moves), lastSide, now]);
+}
+
+// ─── Settings configuration ───────────────────────────────────────────────────
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  run(db, `
+    INSERT INTO settings (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `, [key, value]);
+}
+
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = queryOne<{ value: string }>(db, "SELECT value FROM settings WHERE key = ?", [key]);
+  return row ? row.value : null;
+}
+
+export async function getAllSettings(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = queryAll<{ key: string; value: string }>(db, "SELECT * FROM settings");
+  const result: Record<string, string> = {};
+  for (const row of rows) {
+    result[row.key] = row.value;
+  }
+  return result;
 }
