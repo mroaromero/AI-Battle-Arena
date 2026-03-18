@@ -10,6 +10,7 @@ import {
   generateBattleId, buildBattleContext,
   determineFinalWinner, ok, err,
 } from "../services/utils.js";
+import { registerChessTools } from "./chess.js";
 
 export function registerAllTools(server: McpServer): void {
   registerCreateBattle(server);
@@ -18,6 +19,8 @@ export function registerAllTools(server: McpServer): void {
   registerSubmitArgument(server);
   registerListBattles(server);
   registerWatchBattle(server);
+  // ── Chess mode tools ──
+  registerChessTools(server);
 }
 
 // ─── 1. arena_create_battle ───────────────────────────────────────────────────
@@ -30,12 +33,14 @@ function registerCreateBattle(server: McpServer): void {
       description: `Crea una sala de debate en AI Battle Arena. El creador es siempre Alpha.
 El oponente (Beta) se une con 'arena_join_battle' usando el código de sala.
 
+Compatible con cualquier cliente de IA que soporte MCP: Claude, ChatGPT, Gemini, Cursor, etc.
+
 Args:
   - topic: Pregunta o tema del debate (ej: "¿La IA reemplazará a los profesores?")
   - alpha_stance: Postura de Alpha, quien crea la sala (ej: "A favor de la IA")
   - beta_stance: Postura de Beta, el oponente (ej: "Defensa del docente humano")
   - my_name: Tu nombre visible en la batalla
-  - my_device: Cliente Claude que usas (ej: "Claude Desktop · Linux")
+  - my_device: Tu cliente de IA (ej: "Claude Desktop · Linux", "ChatGPT Web", "Gemini CLI")
   - max_rounds: Número de rondas (default: 3, máx: 5)
 
 Returns: { battle_id, join_url, my_side, share_message, instructions }`,
@@ -44,7 +49,7 @@ Returns: { battle_id, join_url, my_side, share_message, instructions }`,
         alpha_stance: z.string().min(5).max(150).describe("Postura de Alpha (tú)"),
         beta_stance:  z.string().min(5).max(150).describe("Postura de Beta (oponente)"),
         my_name:      z.string().min(2).max(50).describe("Tu nombre en la batalla"),
-        my_device:    z.string().max(80).default("Claude Desktop").describe("Tu cliente Claude"),
+        my_device:    z.string().max(80).default("AI Desktop").describe("Tu cliente de IA (ej: Claude Desktop, ChatGPT, Gemini)"),
         max_rounds:   z.number().int().min(1).max(5).default(3).describe("Número de rondas"),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -82,16 +87,18 @@ function registerJoinBattle(server: McpServer): void {
       description: `Conecta como Contendiente Beta a una sala existente e inicia el debate.
 Tu postura ya fue asignada por Alpha al crear la sala.
 
+Compatible con cualquier cliente MCP: Claude, ChatGPT, Gemini CLI, Cursor, OpenCode, etc.
+
 Args:
   - battle_id: Código de 4 caracteres (ej: "A3F9")
   - my_name: Tu nombre visible en la batalla
-  - my_device: Tu cliente Claude (ej: "Claude Mobile · iOS")
+  - my_device: Tu cliente de IA (ej: "Claude Web", "ChatGPT", "Gemini")
 
 Returns: BattleContext con tu postura asignada e instrucciones para la ronda 1.`,
       inputSchema: z.object({
         battle_id: z.string().length(4).toUpperCase().describe("Código de sala"),
         my_name:   z.string().min(2).max(50).describe("Tu nombre"),
-        my_device: z.string().max(80).default("Claude Web").describe("Tu cliente Claude"),
+        my_device: z.string().max(80).default("AI Web").describe("Tu cliente de IA"),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -282,6 +289,7 @@ Returns: { count, battles: [{ id, topic, status, round, alpha, beta, spectators 
           battles: battles.map(b => ({
             id: b.id,
             topic: b.topic,
+            game_mode: b.game_mode,
             status: b.status,
             round: `${b.current_round}/${b.max_rounds}`,
             alpha: b.alpha?.name ?? "Esperando...",

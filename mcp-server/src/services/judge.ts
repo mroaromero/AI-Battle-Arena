@@ -1,7 +1,7 @@
 import type { Battle, RoundScores } from "../types.js";
 import { createJudgeProvider } from "./llm-providers.js";
 
-// ─── Judge Output ───────────────────────────────────────────────────────────────────
+// ─── Judge Output ─────────────────────────────────────────────────────────────
 
 interface JudgeOutput {
   winner: "alpha" | "beta" | "draw";
@@ -10,7 +10,7 @@ interface JudgeOutput {
   judge_provider?: string;
 }
 
-// ─── Judge a completed round ────────────────────────────────────────────────────
+// ─── Judge a completed round ──────────────────────────────────────────────────
 
 export async function judgeRound(
   battle: Battle,
@@ -26,7 +26,7 @@ export async function judgeRound(
 
   const systemPrompt = `Eres un árbitro imparcial de debates entre agentes de IA.
 Tu rol es evaluar los argumentos con criterio filosófico y retórico riguroso.
-Debes responder ÚnicaMENTE con un JSON válido, sin texto adicional, sin markdown.`;
+Debes responder ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown.`;
 
   const userPrompt = `
 DEBATE: "${battle.topic}"
@@ -92,7 +92,7 @@ Criterios:
   }
 }
 
-// ─── Mock judge for development / no-API-key mode ────────────────────────────────
+// ─── Mock judge for development / no-API-key mode ────────────────────────────
 
 function mockJudge(alpha: string, beta: string, round: number): JudgeOutput {
   const winner = alpha.length > beta.length ? "alpha" : beta.length > alpha.length ? "beta" : "draw";

@@ -41,9 +41,37 @@ async function runHTTP(): Promise<void> {
 
   app.use(express.json());
 
-  // ── Health check ──────────────────────────────────────────────────────────
+  // ── Health check ─────────────────────────────────────────────────────────────────
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok", server: "battle-arena-mcp", version: "1.0.0" });
+    res.json({ status: "ok", server: "battle-arena-mcp", version: "2.0.0" });
+  });
+
+  // ── MCP Discovery endpoint (spec 2025-06-18) ────────────────────────────
+  // Allows MCP clients (Claude, ChatGPT, Gemini CLI, Cursor, etc.)
+  // to auto-discover the server's capabilities.
+  app.get("/.well-known/mcp.json", (_req, res) => {
+    const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
+    res.json({
+      name: "AI Battle Arena",
+      version: "2.0.0",
+      description: "Multi-modal AI battle platform. Debate and chess matches between AI agents from any provider.",
+      mcp_version: "2025-06-18",
+      endpoint: `${baseUrl}/mcp`,
+      transport: ["streamable-http", "stdio"],
+      capabilities: { tools: true, resources: false, prompts: false },
+      tools: [
+        { name: "arena_create_battle",       description: "Create a debate battle room" },
+        { name: "arena_join_battle",          description: "Join an existing debate room" },
+        { name: "arena_get_context",          description: "Get your debate context and turn status" },
+        { name: "arena_submit_argument",      description: "Submit your argument for the current round" },
+        { name: "arena_list_battles",         description: "List active battles (debate and chess)" },
+        { name: "arena_watch_battle",         description: "Spectate any battle" },
+        { name: "arena_create_chess_match",   description: "Create a chess match (you play White)" },
+        { name: "arena_join_chess_match",     description: "Join a chess match as Black" },
+        { name: "arena_make_move",            description: "Make a chess move (SAN or UCI notation)" },
+        { name: "arena_get_board",            description: "Get current chess board state and legal moves" },
+      ],
+    });
   });
 
   // ── Server-Sent Events — real-time broadcast for spectators ──────────────
@@ -96,6 +124,19 @@ async function runHTTP(): Promise<void> {
   app.head("/mcp", (_req, res) => {
     res.setHeader("MCP-Protocol-Version", "2025-06-18");
     res.status(200).end();
+  });
+
+  // GET /mcp — some clients (Gemini CLI, Cursor SSE mode) use GET for discovery
+  app.get("/mcp", (_req, res) => {
+    res.setHeader("MCP-Protocol-Version", "2025-06-18");
+    res.json({
+      name: "AI Battle Arena",
+      version: "2.0.0",
+      protocol: "mcp",
+      transport: "streamable-http",
+      endpoint: "/mcp",
+      discovery: "/.well-known/mcp.json",
+    });
   });
 
   const port = parseInt(process.env.PORT ?? "3000");

@@ -1,4 +1,4 @@
-// ─── LLM Provider Abstraction ─────────────────────────────────────────────────────────
+// ─── LLM Provider Abstraction ─────────────────────────────────────────────────
 // Allows the judge to use Anthropic, OpenRouter, or Groq interchangeably.
 // OpenRouter and Groq both use the OpenAI Chat Completions API format.
 
@@ -12,7 +12,7 @@ export interface LLMProvider {
   chat(messages: ChatMessage[], maxTokens?: number): Promise<string>;
 }
 
-// ─── Anthropic Provider ───────────────────────────────────────────────────────────────
+// ─── Anthropic Provider ───────────────────────────────────────────────────────
 
 class AnthropicProvider implements LLMProvider {
   name = "anthropic";
@@ -48,7 +48,7 @@ class AnthropicProvider implements LLMProvider {
   }
 }
 
-// ─── OpenAI-compatible Provider (OpenRouter + Groq share this impl) ───────────────
+// ─── OpenAI-compatible Provider (OpenRouter + Groq share this impl) ───────────
 
 class OpenAICompatibleProvider implements LLMProvider {
   name: string;
@@ -91,7 +91,7 @@ class OpenAICompatibleProvider implements LLMProvider {
   }
 }
 
-// ─── Provider factory ─────────────────────────────────────────────────────────────────
+// ─── Provider factory ─────────────────────────────────────────────────────────
 // Priority: JUDGE_PROVIDER env var → auto-detect by available API keys.
 // Cascade: configured provider → Anthropic → OpenRouter → Groq → mock
 
