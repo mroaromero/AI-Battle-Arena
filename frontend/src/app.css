@@ -1,23 +1,32 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Syncopate:wght@400;700&display=swap');
 
 :root {
-	--bg: #0a0a0b;
-	--surface: #111114;
-	--surface2: #18181d;
-	--border: rgba(255,255,255,0.07);
-	--border-bright: rgba(255,255,255,0.15);
-	--red: #ff3131;
-	--red-dim: rgba(255,49,49,0.12);
-	--blue: #2979ff;
-	--blue-dim: rgba(41,121,255,0.12);
-	--gold: #f5c842;
-	--gold-dim: rgba(245,200,66,0.1);
-	--green: #22c55e;
-	--text: #f0f0f0;
-	--text-muted: rgba(240,240,240,0.45);
-	--text-dim: rgba(240,240,240,0.22);
-	--font-display: 'Barlow Condensed', sans-serif;
-	--font-body: 'Barlow', sans-serif;
+	/* Neo-Arcade Color Palette */
+	--bg: #040405;            /* Void Black */
+	--surface: #0a0a0d;       /* Deep Surface */
+	--surface2: #121216;      /* Elevated Surface */
+	--border: rgba(255, 255, 255, 0.08);
+	--border-bright: rgba(255, 255, 255, 0.2);
+	
+	/* Accent Colors */
+	--alpha-neon: #ff0f39;    /* Neon Crimson */
+	--alpha-dim: rgba(255, 15, 57, 0.12);
+	
+	--beta-neon: #0ff0ff;     /* Electric Blue */
+	--beta-dim: rgba(15, 240, 255, 0.12);
+	
+	--gold: #ffbe0b;          /* Arcade Gold */
+	--gold-dim: rgba(255, 190, 11, 0.1);
+	
+	--green: #39ff14;         /* Matrix Green */
+	
+	/* Typography */
+	--text: #ffffff;
+	--text-muted: rgba(255, 255, 255, 0.55);
+	--text-dim: rgba(255, 255, 255, 0.25);
+	
+	--font-display: 'Syncopate', sans-serif;
+	--font-body: 'Space Grotesk', sans-serif;
 	--font-mono: 'JetBrains Mono', monospace;
 }
 
@@ -31,17 +40,32 @@ body {
 	font-family: var(--font-body);
 	min-height: 100vh;
 	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden;
 }
 
-/* noise overlay */
+/* Hardcore Noise Overlay */
 body::after {
 	content: '';
 	position: fixed;
 	inset: 0;
 	pointer-events: none;
 	z-index: 9999;
-	opacity: 0.4;
-	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+	opacity: 0.35;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+}
+
+/* Subtle Grid Background */
+body::before {
+	content: '';
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	background-size: 40px 40px;
+	background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+					  linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+	mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+	-webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
 }
 
 a { color: inherit; text-decoration: none; }
@@ -51,36 +75,70 @@ button {
 	cursor: pointer;
 	border: none;
 	background: none;
+	color: var(--text);
 }
 
-/* ── Utility classes ── */
+/* ── Utility Classes ── */
 .font-display { font-family: var(--font-display); }
 .font-mono { font-family: var(--font-mono); }
+.text-alpha { color: var(--alpha-neon); }
+.text-beta { color: var(--beta-neon); }
 
 .tag {
-	font-family: var(--font-display);
+	font-family: var(--font-mono);
 	font-weight: 700;
 	font-size: 0.65rem;
-	letter-spacing: 2px;
+	letter-spacing: 1px;
 	text-transform: uppercase;
-	padding: 3px 8px;
-	border-radius: 2px;
+	padding: 4px 10px;
+	border-radius: 0; /* Brutalist sharp edges */
 }
-.tag-red { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,49,49,0.25); }
-.tag-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(41,121,255,0.25); }
-.tag-gold { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(245,200,66,0.25); }
-.tag-green { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.tag-red { background: var(--alpha-dim); color: var(--alpha-neon); border: 1px solid rgba(255,15,57,0.3); }
+.tag-blue { background: var(--beta-dim); color: var(--beta-neon); border: 1px solid rgba(15,240,255,0.3); }
+.tag-gold { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(255,190,11,0.3); }
+.tag-green { background: rgba(57,255,20,0.1); color: var(--green); border: 1px solid rgba(57,255,20,0.3); }
 .tag-dim { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
 
+/* ── Animation Utilities ── */
+.stagger-enter {
+	animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.glitch-text:hover {
+	animation: glitch 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+	color: var(--alpha-neon);
+}
+
+.pulse-border {
+	animation: borderPulse 2s infinite alternate;
+}
+
+/* ── Keyframes ── */
 @keyframes fadeUp {
-	from { opacity: 0; transform: translateY(14px); }
-	to { opacity: 1; transform: translateY(0); }
+	from { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+	to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
-@keyframes pulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.35; }
+
+@keyframes glitch {
+	0% { transform: translate(0) }
+	20% { transform: translate(-2px, 2px) }
+	40% { transform: translate(-2px, -2px) }
+	60% { transform: translate(2px, 2px) }
+	80% { transform: translate(2px, -2px) }
+	100% { transform: translate(0) }
 }
+
+@keyframes pulse-neon {
+	0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+	50% { opacity: 0.5; filter: drop-shadow(0 0 1px currentColor); }
+}
+
 @keyframes ticker {
 	0% { transform: translateX(100vw); }
 	100% { transform: translateX(-100%); }
+}
+
+@keyframes borderPulse {
+	0% { border-color: rgba(255, 255, 255, 0.1); }
+	100% { border-color: rgba(255, 255, 255, 0.4); box-shadow: 0 0 10px rgba(255, 255, 255, 0.1) inset; }
 }

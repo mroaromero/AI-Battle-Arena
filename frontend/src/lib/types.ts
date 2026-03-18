@@ -29,15 +29,37 @@ export interface Round {
 	scores: RoundScores | null;
 }
 
+export interface ChessMove {
+	move_number: number;
+	side: string;
+	san: string;
+	uci: string;
+	fen_after: string;
+}
+
+export interface ChessState {
+	fen: string;
+	pgn: string;
+	moves: ChessMove[];
+	turn: 'white' | 'black';
+	is_check: boolean;
+	is_checkmate: boolean;
+	is_draw: boolean;
+	draw_reason?: string;
+	legal_moves: string[];
+	move_count: number;
+}
+
 export interface Battle {
 	battle_id: string;
 	topic: string;
 	status: BattleStatus;
 	contenders: {
-		alpha: { name: string; stance: string } | null;
-		beta: { name: string; stance: string } | null;
+		alpha: Contender | null;
+		beta: Contender | null;
 	};
 	rounds: Round[];
+	chess?: ChessState;
 	final_winner: 'alpha' | 'beta' | 'draw' | null;
 	spectator_count: number;
 }
