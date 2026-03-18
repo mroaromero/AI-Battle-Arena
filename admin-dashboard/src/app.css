@@ -4,23 +4,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --border: 214.3 31.8% 91.4%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 240 10% 3.9%;
+    --background: 240 10% 4%;
     --foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
+    
+    /* Neon Colors - Cyberpunk Vibe */
+    --primary: 180 100% 50%; /* Cyan Neon */
+    --primary-foreground: 240 10% 4%; /* Dark text for primary */
+    --secondary: 320 100% 50%; /* Magenta Neon */
+    --secondary-foreground: 0 0% 98%; /* White text */
+    
+    --border: 240 10% 15%;
+    --muted: 240 10% 8%;
+    --muted-foreground: 240 5% 65%;
+    
+    /* Indicators */
+    --destructive: 0 100% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 130 100% 45%;
+    --success-foreground: 0 0% 98%;
+    
+    --radius: 0.25rem;
   }
 }
 
@@ -29,6 +32,47 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
+    /* Ominous Deep Grid Background */
+    background-image: 
+      linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center top;
+    background-attachment: fixed;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Rajdhani', sans-serif;
+  }
+  
+  /* Reticle / HUD accents */
+  ::selection {
+    @apply bg-primary/30 text-white;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 10px hsl(var(--primary) / 0.6), 0 0 20px hsl(var(--primary) / 0.3);
+  }
+  .text-glow-secondary {
+    text-shadow: 0 0 10px hsl(var(--secondary) / 0.6), 0 0 20px hsl(var(--secondary) / 0.3);
+  }
+  .box-glow {
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.2), inset 0 0 10px hsl(var(--primary) / 0.1);
+  }
+  .glass-panel {
+    @apply bg-black/60 backdrop-blur-xl border border-white/10;
+  }
+  .glass-panel-accent {
+    @apply bg-background/80 backdrop-blur-md border border-primary/40;
+  }
+  /* Decorative corner cuts for HUD elements */
+  .hud-corners {
+    position: relative;
+    clip-path: polygon(
+      0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%
+    );
   }
 }
