@@ -1,15 +1,16 @@
 import type { Battle, RoundScores } from "../types.js";
+import { createJudgeProvider } from "./llm-providers.js";
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
-const JUDGE_MODEL = "claude-opus-4-5";
+// ─── Judge Output ───────────────────────────────────────────────────────────────────
 
 interface JudgeOutput {
   winner: "alpha" | "beta" | "draw";
   verdict: string;
   scores: RoundScores;
+  judge_provider?: string;
 }
 
-// ─── Judge a completed round ──────────────────────────────────────────────────
+// ─── Judge a completed round ────────────────────────────────────────────────────
 
 export async function judgeRound(
   battle: Battle,
@@ -17,13 +18,15 @@ export async function judgeRound(
   alphaArgument: string,
   betaArgument: string
 ): Promise<JudgeOutput> {
-  if (!ANTHROPIC_API_KEY) {
+  const provider = createJudgeProvider();
+
+  if (!provider) {
     return mockJudge(alphaArgument, betaArgument, roundNumber);
   }
 
-  const systemPrompt = `Eres un árbitro imparcial de debates entre instancias de Claude.
+  const systemPrompt = `Eres un árbitro imparcial de debates entre agentes de IA.
 Tu rol es evaluar los argumentos con criterio filosófico y retórico riguroso.
-Debes responder ÚNICAMENTE con un JSON válido, sin texto adicional.`;
+Debes responder ÚnicaMENTE con un JSON válido, sin texto adicional, sin markdown.`;
 
   const userPrompt = `
 DEBATE: "${battle.topic}"
@@ -62,44 +65,34 @@ Criterios:
 - rhetoric: claridad, persuasión y estructura del lenguaje
 `;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: JUDGE_MODEL,
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Judge API error ${response.status}: ${text}`);
-  }
-
-  const data = await response.json() as { content: Array<{ type: string; text: string }> };
-  const raw = data.content.find(b => b.type === "text")?.text ?? "{}";
-
   try {
-    const parsed = JSON.parse(raw) as JudgeOutput;
+    const raw = await provider.chat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], 800);
+
+    // Strip markdown code blocks if present
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/m, "")
+      .replace(/\s*```$/m, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned) as JudgeOutput;
     parsed.scores.alpha_total = Math.round(
       (parsed.scores.alpha_coherence + parsed.scores.alpha_evidence + parsed.scores.alpha_rhetoric) / 3
     );
     parsed.scores.beta_total = Math.round(
       (parsed.scores.beta_coherence + parsed.scores.beta_evidence + parsed.scores.beta_rhetoric) / 3
     );
+    parsed.judge_provider = provider.name;
     return parsed;
-  } catch {
-    throw new Error(`Could not parse judge response: ${raw}`);
+  } catch (e) {
+    console.error(`[Judge] Provider ${provider.name} failed: ${e}. Falling back to mock.`);
+    return mockJudge(alphaArgument, betaArgument, roundNumber);
   }
 }
 
-// ─── Mock judge for development / no-API-key mode ────────────────────────────
+// ─── Mock judge for development / no-API-key mode ────────────────────────────────
 
 function mockJudge(alpha: string, beta: string, round: number): JudgeOutput {
   const winner = alpha.length > beta.length ? "alpha" : beta.length > alpha.length ? "beta" : "draw";
@@ -119,5 +112,6 @@ function mockJudge(alpha: string, beta: string, round: number): JudgeOutput {
       beta_coherence: bC, beta_evidence: bE, beta_rhetoric: bR,
       beta_total: Math.round((bC + bE + bR) / 3),
     },
+    judge_provider: "mock",
   };
 }
