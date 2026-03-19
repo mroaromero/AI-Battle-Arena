@@ -4,6 +4,7 @@ import {
   createBattle, getBattle, addContender, updateBattleStatus,
   listActiveBattles, saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
+  tryActivateBattle,
 } from "../services/db.js";
 import { judgeRound } from "../services/judge.js";
 import {
@@ -113,9 +114,12 @@ Returns: BattleContext con tu postura asignada e instrucciones para la ronda 1.`
         const betaStance = battle.beta?.stance ?? "";
         if (!betaStance) return err(`La sala #${bid} no tiene una postura asignada para Beta.`);
 
+        // Atomic activation: only succeeds if battle is still 'waiting'
+        const activated = await tryActivateBattle(bid);
+        if (!activated) return err(`La batalla #${bid} ya fue tomada por otro oponente.`);
+
         // Update Beta with real name and device, keeping the pre-assigned stance
         await addContender(bid, "beta", my_name, betaStance, my_device);
-        await updateBattleStatus(bid, "active");
         await incrementRound(bid);
 
         const fresh = await getBattle(bid);

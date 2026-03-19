@@ -48,7 +48,7 @@ function App() {
                 </Authenticated>
               }
             >
-              <Route index element={<NavigateToResource resource="dashboard" />} />
+              <Route index element={<Navigate to="/dashboard" />} />
               <Route path="/dashboard" element={<Dashboard />} />
             </Route>
 

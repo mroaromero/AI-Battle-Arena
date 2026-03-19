@@ -71,21 +71,38 @@ Criterios:
       { role: "user", content: userPrompt },
     ], 800);
 
-    // Strip markdown code blocks if present
-    const cleaned = raw
-      .replace(/^```(?:json)?\s*/m, "")
-      .replace(/\s*```$/m, "")
-      .trim();
+    // Extract JSON by finding first { and last } — handles markdown wrappers
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) throw new Error("No JSON object found in response");
+    const jsonStr = raw.slice(start, end + 1);
 
-    const parsed = JSON.parse(cleaned) as JudgeOutput;
-    parsed.scores.alpha_total = Math.round(
-      (parsed.scores.alpha_coherence + parsed.scores.alpha_evidence + parsed.scores.alpha_rhetoric) / 3
-    );
-    parsed.scores.beta_total = Math.round(
-      (parsed.scores.beta_coherence + parsed.scores.beta_evidence + parsed.scores.beta_rhetoric) / 3
-    );
-    parsed.judge_provider = provider.name;
-    return parsed;
+    const parsed = JSON.parse(jsonStr) as Partial<JudgeOutput> & { scores?: Partial<RoundScores> };
+
+    // Validate required fields with safe defaults
+    const scores: Partial<RoundScores> = parsed.scores ?? {};
+    const aC = Number(scores.alpha_coherence) || 50;
+    const aE = Number(scores.alpha_evidence)  || 50;
+    const aR = Number(scores.alpha_rhetoric)  || 50;
+    const bC = Number(scores.beta_coherence)  || 50;
+    const bE = Number(scores.beta_evidence)   || 50;
+    const bR = Number(scores.beta_rhetoric)   || 50;
+
+    const winner = (parsed.winner === "alpha" || parsed.winner === "beta" || parsed.winner === "draw")
+      ? parsed.winner
+      : (aC + aE + aR > bC + bE + bR ? "alpha" : "beta");
+
+    return {
+      winner,
+      verdict: parsed.verdict ?? `Ronda ${roundNumber} evaluada.`,
+      scores: {
+        alpha_coherence: aC, alpha_evidence: aE, alpha_rhetoric: aR,
+        alpha_total: Math.round((aC + aE + aR) / 3),
+        beta_coherence: bC, beta_evidence: bE, beta_rhetoric: bR,
+        beta_total: Math.round((bC + bE + bR) / 3),
+      },
+      judge_provider: provider.name,
+    };
   } catch (e) {
     console.error(`[Judge] Provider ${provider.name} failed: ${e}. Falling back to mock.`);
     return mockJudge(alphaArgument, betaArgument, roundNumber);
@@ -94,8 +111,9 @@ Criterios:
 
 // ─── Mock judge for development / no-API-key mode ────────────────────────────
 
-function mockJudge(alpha: string, beta: string, round: number): JudgeOutput {
-  const winner = alpha.length > beta.length ? "alpha" : beta.length > alpha.length ? "beta" : "draw";
+function mockJudge(_alpha: string, _beta: string, round: number): JudgeOutput {
+  const roll = Math.random();
+  const winner: "alpha" | "beta" | "draw" = roll < 0.45 ? "alpha" : roll < 0.90 ? "beta" : "draw";
   const aC = 50 + Math.floor(Math.random() * 30);
   const aE = 50 + Math.floor(Math.random() * 30);
   const aR = 50 + Math.floor(Math.random() * 30);
@@ -105,7 +123,7 @@ function mockJudge(alpha: string, beta: string, round: number): JudgeOutput {
 
   return {
     winner,
-    verdict: `[MODO DEMO — sin API key] Ronda ${round}: Ambos contendientes presentaron argumentos estructurados. ${winner === "alpha" ? "Alpha" : winner === "beta" ? "Beta" : "Ninguno"} obtuvo ventaja marginal.`,
+    verdict: `[MODO DEMO — sin API key] Ronda ${round}: ${winner === "draw" ? "Ambos contendientes empataron." : `${winner === "alpha" ? "Alpha" : "Beta"} obtuvo ventaja marginal.`}`,
     scores: {
       alpha_coherence: aC, alpha_evidence: aE, alpha_rhetoric: aR,
       alpha_total: Math.round((aC + aE + aR) / 3),

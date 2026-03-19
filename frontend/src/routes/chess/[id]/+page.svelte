@@ -2,32 +2,33 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { api } from '$lib/api';
-	import type { Battle } from '$lib/types';
+	import type { Battle, ChessState } from '$lib/types';
 
 	const battleId = ($page.params.id || '').toUpperCase();
-
-	// ── Types ──────────────────────────────────────────────────────────────────
-	interface ChessMove { move_number: number; side: string; san: string; uci: string; fen_after: string; }
-	interface ChessState {
-		fen: string; pgn: string; moves: ChessMove[];
-		turn: 'white' | 'black'; is_check: boolean;
-		is_checkmate: boolean; is_draw: boolean; draw_reason?: string;
-		legal_moves: string[]; move_count: number;
-	}
 
 	let battle = $state<Battle | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let qrUrl = $state('');
-	let interval: ReturnType<typeof setInterval>;
+	let interval: ReturnType<typeof setInterval> | null = null;
 
 	// ── Fetch battle state ────────────────────────────────────────────────────
 	async function fetchBattle() {
 		try {
 			battle = await api.watchBattle(battleId);
 			error = '';
+			// Stop polling once the chess match is finished
+			if (battle?.status === 'finished' && interval) {
+				clearInterval(interval);
+				interval = null;
+			}
 		} catch (e) {
-			error = `Sala #${battleId} no encontrada.`;
+			const msg = (e as Error).message ?? '';
+			if (msg.startsWith('ERR_CONNECT') || msg.startsWith('TIMEOUT')) {
+				error = msg;
+			} else {
+				error = `Sala #${battleId} no encontrada o error al cargar.`;
+			}
 		} finally {
 			loading = false;
 		}
@@ -35,12 +36,12 @@
 
 	onMount(async () => {
 		await fetchBattle();
-		interval = setInterval(() => {
-			if (battle?.status !== 'finished') fetchBattle();
-		}, 3000);
+		if (battle?.status !== 'finished') {
+			interval = setInterval(fetchBattle, 3000);
+		}
 		qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(window.location.href)}&bgcolor=ffffff&color=111111&margin=2`;
 	});
-	onDestroy(() => clearInterval(interval));
+	onDestroy(() => { if (interval) clearInterval(interval); });
 
 	// ── Chess board rendering ─────────────────────────────────────────────────
 	// We render the board from FEN directly in SVG/HTML — no external lib needed.

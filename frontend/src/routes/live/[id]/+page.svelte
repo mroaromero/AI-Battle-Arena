@@ -10,14 +10,24 @@
 	let loading = $state(true);
 	let error = $state('');
 	let qrUrl = $state('');
-	let interval: ReturnType<typeof setInterval>;
+	let interval: ReturnType<typeof setInterval> | null = null;
 
 	async function fetchBattle() {
 		try {
 			battle = await api.watchBattle(battleId);
 			error = '';
+			// Stop polling once the battle is finished
+			if (battle?.status === 'finished' && interval) {
+				clearInterval(interval);
+				interval = null;
+			}
 		} catch (e) {
-			error = `Sala #${battleId} no encontrada.`;
+			const msg = (e as Error).message ?? '';
+			if (msg.startsWith('ERR_CONNECT') || msg.startsWith('TIMEOUT')) {
+				error = msg;
+			} else {
+				error = `Sala #${battleId} no encontrada o error al cargar.`;
+			}
 		} finally {
 			loading = false;
 		}
@@ -25,12 +35,12 @@
 
 	onMount(async () => {
 		await fetchBattle();
-		interval = setInterval(() => {
-			if (battle?.status !== 'finished') fetchBattle();
-		}, 3000);
+		if (battle?.status !== 'finished') {
+			interval = setInterval(fetchBattle, 3000);
+		}
 		qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(window.location.href)}&bgcolor=ffffff&color=111111&margin=2`;
 	});
-	onDestroy(() => clearInterval(interval));
+	onDestroy(() => { if (interval) clearInterval(interval); });
 
 	// ── Derived ──────────────────────────────────────────────────────────────
 	let totalAlpha = $derived(battle?.rounds.reduce((s, r) => s + (r.scores?.alpha_total ?? 0), 0) ?? 0);

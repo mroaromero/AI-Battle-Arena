@@ -106,13 +106,16 @@ type SqlParam = string | number | null | Uint8Array;
 
 function queryAll<T>(db: SqlJsDatabase, sql: string, params: SqlParam[] = []): T[] {
   const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const rows: T[] = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject() as T);
+  try {
+    stmt.bind(params);
+    const rows: T[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject() as T);
+    }
+    return rows;
+  } finally {
+    stmt.free();
   }
-  stmt.free();
-  return rows;
 }
 
 function queryOne<T>(db: SqlJsDatabase, sql: string, params: SqlParam[] = []): T | null {
@@ -276,8 +279,22 @@ export async function saveArgument(
 ): Promise<void> {
   const db = await getDb();
   run(db, "INSERT OR IGNORE INTO rounds (battle_id, round_number) VALUES (?, ?)", [battleId, round]);
-  const col = side === "alpha" ? "alpha_argument" : "beta_argument";
-  run(db, `UPDATE rounds SET ${col} = ? WHERE battle_id = ? AND round_number = ?`, [argument, battleId, round]);
+  if (side === "alpha") {
+    run(db, "UPDATE rounds SET alpha_argument = ? WHERE battle_id = ? AND round_number = ?", [argument, battleId, round]);
+  } else {
+    run(db, "UPDATE rounds SET beta_argument = ? WHERE battle_id = ? AND round_number = ?", [argument, battleId, round]);
+  }
+}
+
+export async function tryActivateBattle(battleId: string): Promise<boolean> {
+  const db = await getDb();
+  db.run(
+    "UPDATE battles SET status = 'active', started_at = ? WHERE id = ? AND status = 'waiting'",
+    [new Date().toISOString(), battleId]
+  );
+  const modified = db.getRowsModified();
+  persist(db);
+  return modified > 0;
 }
 
 export async function saveJudgeVerdict(

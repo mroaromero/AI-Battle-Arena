@@ -100,14 +100,15 @@ class OpenAICompatibleProvider implements LLMProvider {
 export async function createJudgeProvider(): Promise<LLMProvider | null> {
   const settings = await getAllSettings();
 
-  const ANTHROPIC_KEY  = settings["ANTHROPIC_API_KEY"] ?? process.env.ANTHROPIC_API_KEY ?? "";
-  const OPENROUTER_KEY = settings["OPENROUTER_API_KEY"] ?? process.env.OPENROUTER_API_KEY ?? "";
-  const GROQ_KEY       = settings["GROQ_API_KEY"] ?? process.env.GROQ_API_KEY ?? "";
-  const JUDGE_PROVIDER = (settings["JUDGE_PROVIDER"] ?? process.env.JUDGE_PROVIDER ?? "auto").toLowerCase();
+  // Use || so empty-string DB values fall back to env vars
+  const ANTHROPIC_KEY  = settings["ANTHROPIC_API_KEY"]  || process.env.ANTHROPIC_API_KEY  || "";
+  const OPENROUTER_KEY = settings["OPENROUTER_API_KEY"] || process.env.OPENROUTER_API_KEY || "";
+  const GROQ_KEY       = settings["GROQ_API_KEY"]       || process.env.GROQ_API_KEY       || "";
+  const JUDGE_PROVIDER = (settings["JUDGE_PROVIDER"] || process.env.JUDGE_PROVIDER || "auto").toLowerCase();
 
-  const ANTHROPIC_MODEL   = settings["JUDGE_MODEL_ANTHROPIC"]  ?? process.env.JUDGE_MODEL_ANTHROPIC   ?? "claude-opus-4-5";
-  const OPENROUTER_MODEL  = settings["JUDGE_MODEL_OPENROUTER"] ?? process.env.JUDGE_MODEL_OPENROUTER  ?? "google/gemini-2.0-flash-001";
-  const GROQ_MODEL        = settings["JUDGE_MODEL_GROQ"]       ?? process.env.JUDGE_MODEL_GROQ        ?? "llama-3.3-70b-versatile";
+  const ANTHROPIC_MODEL   = settings["JUDGE_MODEL_ANTHROPIC"]  || process.env.JUDGE_MODEL_ANTHROPIC   || "claude-opus-4-5";
+  const OPENROUTER_MODEL  = settings["JUDGE_MODEL_OPENROUTER"] || process.env.JUDGE_MODEL_OPENROUTER  || "google/gemini-2.0-flash-001";
+  const GROQ_MODEL        = settings["JUDGE_MODEL_GROQ"]       || process.env.JUDGE_MODEL_GROQ        || "llama-3.3-70b-versatile";
 
   const explicit = JUDGE_PROVIDER !== "auto";
 

@@ -1,17 +1,21 @@
+import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { registerAllTools } from "./tools/battle.js";
-import { startCleanupJob } from "./services/cleanup.js";
+import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
 import { getAllSettings, setSetting } from "./services/db.js";
 
 // ─── Server initialization ────────────────────────────────────────────────────
 
+const VERSION = "2.0.0";
+
 const server = new McpServer({
   name: "battle-arena-mcp-server",
-  version: "1.0.0",
+  version: VERSION,
 });
 
 registerAllTools(server);
@@ -44,7 +48,16 @@ async function runHTTP(): Promise<void> {
 
   // ── Health check ─────────────────────────────────────────────────────────────────
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok", server: "battle-arena-mcp", version: "2.0.0" });
+    res.json({ status: "ok", server: "battle-arena-mcp", version: VERSION });
+  });
+
+  // ── Admin rate limiter — brute-force protection ───────────────────────────────
+  const adminLimiter = rateLimit({
+    windowMs: 60 * 1000,   // 1 minute
+    max: 20,               // 20 requests/min per IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, slow down." },
   });
 
   // ── Admin API ────────────────────────────────────────────────────────────────────
@@ -58,7 +71,11 @@ async function runHTTP(): Promise<void> {
       return;
     }
     
-    if (!authHeader || authHeader !== `Bearer ${adminSecret}`) {
+    const expected = `Bearer ${adminSecret}`;
+    const authOk = authHeader
+      && authHeader.length === expected.length
+      && timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+    if (!authOk) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
@@ -66,7 +83,7 @@ async function runHTTP(): Promise<void> {
     next();
   };
 
-  app.get("/admin/config", adminAuth, async (_req, res) => {
+  app.get("/admin/config", adminLimiter, adminAuth, async (_req, res) => {
     const settings = await getAllSettings();
     // Mask API keys so they are not exposed in plaintext over the wire
     const maskedSettings = { ...settings };
@@ -82,11 +99,16 @@ async function runHTTP(): Promise<void> {
     res.json(maskedSettings);
   });
 
-  app.post("/admin/config", adminAuth, async (req, res) => {
-    const settingsToUpdate = req.body as Record<string, string>;
+  app.post("/admin/config", adminLimiter, adminAuth, async (req, res) => {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      res.status(400).json({ error: "Invalid request body: expected a JSON object" });
+      return;
+    }
+    const settingsToUpdate = body as Record<string, string>;
     for (const [key, value] of Object.entries(settingsToUpdate)) {
       // Avoid saving placeholder masked keys back to the DB
-      if (value && !value.includes("...****")) {
+      if (value && typeof value === "string" && !value.includes("...****")) {
         await setSetting(key, value);
       }
     }
@@ -100,7 +122,7 @@ async function runHTTP(): Promise<void> {
     const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
     res.json({
       name: "AI Battle Arena",
-      version: "2.0.0",
+      version: VERSION,
       description: "Multi-modal AI battle platform. Debate and chess matches between AI agents from any provider.",
       mcp_version: "2025-06-18",
       endpoint: `${baseUrl}/mcp`,
@@ -197,9 +219,12 @@ async function runHTTP(): Promise<void> {
   startCleanupJob();
 
   // Graceful shutdown
-  process.on("SIGTERM", () => {
+  const shutdown = () => {
+    stopCleanupJob();
     httpServer.close(() => process.exit(0));
-  });
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 // ─── stdio transport ──────────────────────────────────────────────────────────

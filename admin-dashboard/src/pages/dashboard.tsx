@@ -32,14 +32,36 @@ export const Dashboard: React.FC = () => {
     fetchSettings();
   }, [token, API_URL, open]);
 
+  const validateSettings = (): string | null => {
+    const maxRounds = settings['MAX_ROUNDS'];
+    if (maxRounds) {
+      const n = parseInt(maxRounds, 10);
+      if (isNaN(n) || n < 1 || n > 10) return 'MAX_ROUNDS debe ser un número entre 1 y 10';
+    }
+    const maxWords = settings['MAX_WORDS'];
+    if (maxWords) {
+      const n = parseInt(maxWords, 10);
+      if (isNaN(n) || n < 50 || n > 8000) return 'MAX_WORDS debe ser un número entre 50 y 8000';
+    }
+    return null;
+  };
+
   const saveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationError = validateSettings();
+    if (validationError) {
+      open?.({ type: 'error', message: 'VALIDACIÓN FALLIDA', description: validationError, key: 'val-err' });
+      return;
+    }
+
     setIsSaving(true);
     open?.({ type: 'progress', message: 'INICIANDO OVERRIDE', description: 'Escribiendo en disco...', key: 'save-prog' });
 
     try {
       const payload = { ...settings };
       for (const key in payload) {
+        // No enviar campos vacíos ni claves enmascaradas
         if (!payload[key] || payload[key].includes('...****')) {
           delete payload[key];
         }
@@ -56,11 +78,16 @@ export const Dashboard: React.FC = () => {
 
       if (res.ok) {
         open?.({ type: 'success', message: 'SYS_UPDATED', description: 'Configuraciones reescritas globalmente.', key: 'save-ok' });
+      } else if (res.status === 401) {
+        localStorage.removeItem('admin_secret');
+        window.location.href = '/login';
+      } else if (res.status === 400) {
+        open?.({ type: 'error', message: 'ERR_400', description: 'Datos inválidos enviados al servidor.', key: 'save-err' });
       } else {
-        open?.({ type: 'error', message: 'SYS_ERROR 500', description: 'Fallo al sobrescribir configuraciones.', key: 'save-err' });
+        open?.({ type: 'error', message: `SYS_ERROR ${res.status}`, description: 'Fallo al sobrescribir configuraciones.', key: 'save-err' });
       }
     } catch {
-      open?.({ type: 'error', message: 'SYS_ERROR', description: 'Conexión interrumpida con Master Node.', key: 'save-fail' });
+      open?.({ type: 'error', message: 'ERR_NETWORK', description: 'Conexión interrumpida con Master Node.', key: 'save-fail' });
     } finally {
       setIsSaving(false);
     }
@@ -129,7 +156,11 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">API KEY</label>
-                  <input type="password" placeholder="sk-ant-..." value={settings['ANTHROPIC_API_KEY'] || ''} onChange={e => updateSetting('ANTHROPIC_API_KEY', e.target.value)} className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
+                  <input type="password"
+                    placeholder={settings['ANTHROPIC_API_KEY']?.includes('...****') ? '[ Dejar vacío para mantener la key actual ]' : 'sk-ant-...'}
+                    value={settings['ANTHROPIC_API_KEY']?.includes('...****') ? '' : (settings['ANTHROPIC_API_KEY'] || '')}
+                    onChange={e => updateSetting('ANTHROPIC_API_KEY', e.target.value)}
+                    className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">MODELO DE LENGUAJE</label>
@@ -145,7 +176,11 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">API KEY</label>
-                  <input type="password" placeholder="sk-or-..." value={settings['OPENROUTER_API_KEY'] || ''} onChange={e => updateSetting('OPENROUTER_API_KEY', e.target.value)} className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
+                  <input type="password"
+                    placeholder={settings['OPENROUTER_API_KEY']?.includes('...****') ? '[ Dejar vacío para mantener la key actual ]' : 'sk-or-...'}
+                    value={settings['OPENROUTER_API_KEY']?.includes('...****') ? '' : (settings['OPENROUTER_API_KEY'] || '')}
+                    onChange={e => updateSetting('OPENROUTER_API_KEY', e.target.value)}
+                    className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">MODELO DE LENGUAJE</label>
@@ -161,7 +196,11 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">API KEY</label>
-                  <input type="password" placeholder="gsk_..." value={settings['GROQ_API_KEY'] || ''} onChange={e => updateSetting('GROQ_API_KEY', e.target.value)} className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
+                  <input type="password"
+                    placeholder={settings['GROQ_API_KEY']?.includes('...****') ? '[ Dejar vacío para mantener la key actual ]' : 'gsk_...'}
+                    value={settings['GROQ_API_KEY']?.includes('...****') ? '' : (settings['GROQ_API_KEY'] || '')}
+                    onChange={e => updateSetting('GROQ_API_KEY', e.target.value)}
+                    className="w-full bg-surface2 border border-border px-3 py-2 text-[0.8rem] text-text font-mono focus:outline-none focus:border-white transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="block font-mono text-[0.6rem] font-bold text-[rgba(255,255,255,0.55)] uppercase">MODELO DE LENGUAJE</label>
