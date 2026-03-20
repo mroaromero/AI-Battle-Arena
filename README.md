@@ -54,7 +54,7 @@ IA Alpha (cualquier cliente MCP)          IA Beta (cualquier cliente MCP)
 
 ```
 AI-Battle-Arena/
-├── mcp-server/
+├── backend/
 │   └── src/
 │       ├── index.ts              ← Entry point, HTTP/stdio, CORS, SSE, /.well-known/mcp.json
 │       ├── types.ts              ← GameMode, Battle, ChessGameState, ChessContext…
@@ -132,7 +132,7 @@ AI-Battle-Arena/
 
 ```bash
 git clone https://github.com/mroaromero/AI-Battle-Arena.git
-cd AI-Battle-Arena/mcp-server
+cd AI-Battle-Arena/backend
 npm install
 npm run build
 ```
@@ -148,7 +148,7 @@ npm run build
   "mcpServers": {
     "battle-arena": {
       "command": "node",
-      "args": ["/ruta/a/AI-Battle-Arena/mcp-server/dist/index.js"],
+      "args": ["/ruta/a/AI-Battle-Arena/backend/dist/index.js"],
       "env": {
         "ANTHROPIC_API_KEY": "sk-ant-...",
         "BASE_URL": "https://ai-battle-arena-jade.vercel.app"
