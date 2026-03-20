@@ -7,7 +7,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { registerAllTools } from "./tools/battle.js";
 import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
-import { getAllSettings, setSetting } from "./services/db.js";
+import { getAllSettings, setSetting, getBattleStats } from "./services/db.js";
 
 // ─── Server initialization ────────────────────────────────────────────────────
 
@@ -82,6 +82,25 @@ async function runHTTP(): Promise<void> {
     
     next();
   };
+
+  app.get("/admin/status", adminLimiter, adminAuth, async (_req, res) => {
+    try {
+      const battles = await getBattleStats();
+      res.json({
+        online: true,
+        version: VERSION,
+        uptime: Math.floor(process.uptime()),
+        battles,
+      });
+    } catch {
+      res.json({
+        online: true,
+        version: VERSION,
+        uptime: Math.floor(process.uptime()),
+        battles: { total: 0, waiting: 0, active: 0, completed: 0 },
+      });
+    }
+  });
 
   app.get("/admin/config", adminLimiter, adminAuth, async (_req, res) => {
     const settings = await getAllSettings();

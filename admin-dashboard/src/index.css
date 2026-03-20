@@ -72,3 +72,21 @@
   80% { transform: translate(2px, -2px) }
   100% { transform: translate(0) }
 }
+
+/* ── Ticker animation ─────────────────────────────────────────────────── */
+.ticker-wrap {
+  overflow: hidden;
+  width: 100%;
+}
+.ticker-content {
+  display: inline-block;
+  white-space: nowrap;
+  animation: ticker 35s linear infinite;
+}
+.ticker-content:hover {
+  animation-play-state: paused;
+}
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

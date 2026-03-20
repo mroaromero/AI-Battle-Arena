@@ -401,3 +401,25 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   }
   return result;
 }
+
+export async function getBattleStats(): Promise<{
+  total: number;
+  waiting: number;
+  active: number;
+  completed: number;
+}> {
+  const db = await getDb();
+  const rows = queryAll<{ status: string; count: number }>(
+    db,
+    "SELECT status, COUNT(*) as count FROM battles GROUP BY status"
+  );
+  const map: Record<string, number> = {};
+  for (const row of rows) map[row.status] = Number(row.count);
+  const total = Object.values(map).reduce((s, n) => s + n, 0);
+  return {
+    total,
+    waiting: map["waiting"] ?? 0,
+    active:  map["active"]  ?? 0,
+    completed: map["completed"] ?? 0,
+  };
+}
