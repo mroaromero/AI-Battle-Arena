@@ -402,6 +402,95 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   return result;
 }
 
+// ─── Archive ──────────────────────────────────────────────────────────────────
+
+export interface ArchivedBattle {
+  id: string;
+  topic: string;
+  game_mode: GameMode;
+  created_at: string;
+  finished_at: string | null;
+  final_winner: string | null;
+  max_rounds: number;
+  current_round: number;
+  spectator_count: number;
+  alpha_name: string | null;
+  beta_name: string | null;
+  total_rounds: number;
+}
+
+export async function listArchivedBattles(opts: {
+  page?: number;
+  limit?: number;
+  gameMode?: "debate" | "chess" | "all";
+  search?: string;
+} = {}): Promise<{ battles: ArchivedBattle[]; total: number }> {
+  const db = await getDb();
+  const page = opts.page ?? 1;
+  const limit = opts.limit ?? 20;
+  const gameMode = opts.gameMode ?? "all";
+  const search = opts.search;
+
+  const where: string[] = ["b.status = 'completed'"];
+  const params: SqlParam[] = [];
+
+  if (gameMode !== "all") {
+    where.push("b.game_mode = ?");
+    params.push(gameMode);
+  }
+  if (search) {
+    where.push("b.topic LIKE ?");
+    params.push(`%${search}%`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+  // Total count
+  const countRow = queryOne<{ count: number }>(
+    db,
+    `SELECT COUNT(*) as count FROM battles b ${whereClause}`,
+    params
+  );
+  const total = countRow ? Number(countRow.count) : 0;
+
+  // Paginated results
+  const offset = (page - 1) * limit;
+  const rows = queryAll<Record<string, unknown>>(
+    db,
+    `SELECT
+       b.id, b.topic, b.game_mode, b.created_at, b.finished_at,
+       b.final_winner, b.max_rounds, b.current_round, b.spectator_count,
+       c1.name as alpha_name, c2.name as beta_name,
+       COUNT(DISTINCT r.round_number) as total_rounds
+     FROM battles b
+     LEFT JOIN contenders c1 ON c1.battle_id = b.id AND c1.side = 'alpha'
+     LEFT JOIN contenders c2 ON c2.battle_id = b.id AND c2.side = 'beta'
+     LEFT JOIN rounds r ON r.battle_id = b.id
+     ${whereClause}
+     GROUP BY b.id
+     ORDER BY b.finished_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const battles: ArchivedBattle[] = rows.map(r => ({
+    id: r["id"] as string,
+    topic: r["topic"] as string,
+    game_mode: (r["game_mode"] as GameMode) ?? "debate",
+    created_at: r["created_at"] as string,
+    finished_at: r["finished_at"] as string | null,
+    final_winner: r["final_winner"] as string | null,
+    max_rounds: r["max_rounds"] as number,
+    current_round: r["current_round"] as number,
+    spectator_count: r["spectator_count"] as number,
+    alpha_name: r["alpha_name"] as string | null,
+    beta_name: r["beta_name"] as string | null,
+    total_rounds: Number(r["total_rounds"]),
+  }));
+
+  return { battles, total };
+}
+
 export async function getBattleStats(): Promise<{
   total: number;
   waiting: number;

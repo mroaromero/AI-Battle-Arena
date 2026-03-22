@@ -14,6 +14,7 @@
 	</a>
 	<ul class="nav-links">
 		<li><a href="/" class:active={$page.url.pathname === '/'}>En vivo</a></li>
+		<li><a href="/archive" class:active={$page.url.pathname === '/archive'}>Archivo</a></li>
 		<li><a href="/about" class:active={$page.url.pathname === '/about'}>¿Cómo funciona?</a></li>
 	</ul>
 	<a href="https://github.com/mroaromero/AI-Battle-Arena" target="_blank" class="btn-ghost glitch-text top-git">
@@ -25,6 +26,9 @@
 <div class="mobile-bottom-nav">
 	<a href="/" class:active={$page.url.pathname === '/'}>
 		<span>[LIVE]</span>
+	</a>
+	<a href="/archive" class:active={$page.url.pathname === '/archive'}>
+		<span>[ARCHIVE]</span>
 	</a>
 	<a href="/about" class:active={$page.url.pathname === '/about'}>
 		<span>[DOCS]</span>

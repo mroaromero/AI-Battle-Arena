@@ -5,12 +5,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import swaggerUi from "swagger-ui-express";
+import swaggerJSDoc from "swagger-jsdoc";
+import { swaggerSpec } from "./swagger.js";
 import { registerAllTools } from "./tools/battle.js";
 import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
 import {
   getAllSettings, getSetting, setSetting, getBattleStats,
   createBattle, getBattle, addContender, updateBattleStatus,
-  listActiveBattles, saveArgument, saveJudgeVerdict,
+  listActiveBattles, listArchivedBattles, saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, saveChessMove,
 } from "./services/db.js";
@@ -62,6 +65,11 @@ async function runHTTP(): Promise<void> {
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", server: "battle-arena-mcp", version: VERSION });
   });
+
+  // ── API Documentation ───────────────────────────────────────────────────────
+  const spec = swaggerJSDoc(swaggerSpec);
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(spec as any, { customCss: ".swagger-ui .topbar { display: none }" }));
+  app.get("/api/docs/spec", (_req, res) => res.json(spec));
 
   // ── Admin rate limiter — brute-force protection ───────────────────────────────
   const adminLimiter = rateLimit({
@@ -216,6 +224,23 @@ async function runHTTP(): Promise<void> {
       res.json(apiOk(battle));
     } catch (e) {
       res.status(500).json(apiErr(`Error obteniendo batalla: ${String(e)}`));
+    }
+  });
+
+  // 3b. GET /api/battles/archive — List completed battles
+  app.get("/api/battles/archive", apiLimiter, async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const gameMode = (req.query.game_mode as string) || "all";
+      const search = (req.query.search as string) || undefined;
+      const result = await listArchivedBattles({ page, limit, gameMode: gameMode as any, search });
+      res.json(apiOk({
+        battles: result.battles,
+        pagination: { page, limit, total: result.total, totalPages: Math.ceil(result.total / limit) },
+      }));
+    } catch (e) {
+      res.status(500).json(apiErr(`Error listando archivo: ${String(e)}`));
     }
   });
 

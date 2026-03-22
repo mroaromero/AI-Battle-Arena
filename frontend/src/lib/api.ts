@@ -46,6 +46,37 @@ async function callTool(tool: string, input: Record<string, unknown> = {}) {
 	return parsed.data;
 }
 
+export async function fetchArchive(params: {
+	page?: number;
+	limit?: number;
+	gameMode?: string;
+	search?: string;
+} = {}): Promise<{ battles: any[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+	const qs = new URLSearchParams();
+	if (params.page) qs.set('page', String(params.page));
+	if (params.limit) qs.set('limit', String(params.limit));
+	if (params.gameMode && params.gameMode !== 'all') qs.set('game_mode', params.gameMode);
+	if (params.search) qs.set('search', params.search);
+
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+	let res: Response;
+	try {
+		res = await fetch(`${BASE}/api/battles/archive?${qs}`, { signal: controller.signal });
+	} catch (e) {
+		if ((e as Error).name === 'AbortError') throw new Error('TIMEOUT: El servidor tardó demasiado');
+		throw new Error('ERR_CONNECT: Backend unreachable');
+	} finally {
+		clearTimeout(timer);
+	}
+
+	if (!res.ok) throw new Error(`ERR_HTTP: ${res.status}`);
+	const data = await res.json();
+	if (!data.ok) throw new Error(data.error ?? 'Unknown error');
+	return data.data;
+}
+
 export const api = {
 	listBattles: () => callTool('arena_list_battles'),
 	watchBattle: (battle_id: string) => callTool('arena_watch_battle', { battle_id })
