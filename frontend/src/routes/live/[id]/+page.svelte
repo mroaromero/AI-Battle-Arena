@@ -88,6 +88,39 @@
 	let pctAlpha   = $derived(Math.round((totalAlpha / totalMax) * 100));
 	let pctBeta    = $derived(Math.round((totalBeta  / totalMax) * 100));
 
+	// New debate system detection
+	let isDebateMode = $derived(!!battle?.ejes);
+	let currentEje = $derived(battle?.current_eje ?? 1);
+	let currentPhase = $derived(battle?.current_phase ?? 'waiting');
+	let phaseLabel = $derived(battle?.phase_label ?? 'ESPERANDO');
+	let currentEjeData = $derived(battle?.ejes?.find(e => e.number === currentEje));
+	let totalEjes = $derived(battle?.config?.max_ejes ?? battle?.ejes?.length ?? 5);
+
+	// Timer
+	let timerInterval: ReturnType<typeof setInterval> | null = null;
+	let secondsRemaining = $state(0);
+
+	function getPhaseTimeLimit(phase: string): number {
+		if (!battle?.config) return 0;
+		const t = battle.config.timers;
+		switch (phase) {
+			case 'presenting': return t.present_seconds;
+			case 'opening_alpha': case 'opening_beta': return t.opening_seconds;
+			case 'cross_alpha': case 'cross_beta': return t.cross_seconds;
+			case 'synthesis': return t.synthesis_seconds;
+			default: return 0;
+		}
+	}
+
+	function startTimer() {
+		if (timerInterval) clearInterval(timerInterval);
+		secondsRemaining = getPhaseTimeLimit(currentPhase);
+		timerInterval = setInterval(() => {
+			if (secondsRemaining > 0) secondsRemaining--;
+			else if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+		}, 1000);
+	}
+
 	let currentRound = $derived(
 		battle?.rounds.find(r => r.round === battle?.rounds.length && !r.winner) ?? null
 	);
@@ -147,7 +180,15 @@
 		<h1 class="topic glitch-text">"{battle.topic}"</h1>
 		
 		<div class="battle-meta font-mono">
-			<span class="meta-item">ROUND {battle.rounds.filter(r => r.winner).length}/{battle.rounds.length}</span>
+			{#if isDebateMode}
+				<span class="meta-item text-gold">EJE {currentEje}/{totalEjes}</span>
+				<span class="meta-separator">||</span>
+				<span class="meta-item">{phaseLabel}</span>
+				<span class="meta-separator">||</span>
+				<span class="meta-item text-beta">{secondsRemaining}s</span>
+			{:else}
+				<span class="meta-item">ROUND {battle.rounds.filter(r => r.winner).length}/{battle.rounds.length}</span>
+			{/if}
 			<span class="meta-separator">||</span>
 			<span class="meta-item">👁 {battle.spectator_count} SPECS</span>
 		</div>
@@ -188,8 +229,84 @@
 		{/if}
 	</section>
 
-	<!-- ROUNDS LOG -->
-	{#if battle.rounds.length > 0}
+	<!-- DEBATE SYSTEM: EJES DISPLAY -->
+	{#if isDebateMode && battle.ejes}
+	<section class="ejes-feed stagger-enter" style="animation-delay: 0.3s;">
+		<div class="feed-header font-mono text-muted">>> DEBATE_TRANSMISSION</div>
+
+		<!-- Current Eje Header -->
+		{#if currentEjeData}
+		<div class="current-eje-card">
+			<div class="eje-header">
+				<span class="eje-number font-display text-gold">EJE_{currentEje}</span>
+				<span class="eje-phase tag {currentPhase === 'presenting' ? 'tag-gold' : currentPhase.includes('opening') ? 'tag-red' : currentPhase.includes('cross') ? 'tag-blue' : currentPhase === 'synthesis' ? 'tag-green' : 'tag-dim'}">
+					{phaseLabel}
+				</span>
+				{#if secondsRemaining > 0 && battle.status !== 'finished'}
+					<span class="eje-timer font-mono" class:timer-warning={secondsRemaining < 10}>
+						{secondsRemaining}s
+					</span>
+				{/if}
+			</div>
+			<div class="eje-question font-mono">
+				"{currentEjeData.question}"
+			</div>
+		</div>
+		{/if}
+
+		<!-- Completed Ejes -->
+		{#each battle.ejes.filter(e => e.phases.length > 0) as eje}
+			<article class="eje-card">
+				<div class="eje-card-header font-display">
+					EJE_{eje.number} — "{eje.question}"
+				</div>
+
+				<!-- Phases -->
+				{#each eje.phases.filter(p => p.argument) as phase}
+					<div class="phase-block">
+						<div class="phase-label font-mono {phase.side === 'alpha' ? 'text-alpha' : 'text-beta'}">
+							{phase.type === 'opening_alpha' ? '[APERTURA_ALPHA]' :
+							 phase.type === 'opening_beta' ? '[APERTURA_BETA]' :
+							 phase.type === 'cross_alpha' ? '[CRUCE_ALPHA]' :
+							 phase.type === 'cross_beta' ? '[CRUCE_BETA]' :
+							 `[${phase.type.toUpperCase()}]`}
+						</div>
+						<div class="phase-argument">{phase.argument}</div>
+					</div>
+				{/each}
+
+				<!-- Moderator Synthesis -->
+				{#each eje.phases.filter(p => p.synthesis) as syn}
+					<div class="synthesis-panel">
+						<div class="synthesis-header font-mono text-green">[MODERATOR_SYNTHESIS]</div>
+						<div class="synthesis-body">{syn.synthesis}</div>
+					</div>
+				{/each}
+
+				<!-- Panel Scores -->
+				{#if eje.scores.length > 0}
+				<div class="panel-scores">
+					<div class="panel-header font-mono text-gold">[JUDGE_PANEL]</div>
+					{#each eje.scores as score}
+						<div class="score-row font-mono">
+							<span class="text-dim">{score.judge}</span>
+							<span class="{score.winner === 'alpha' ? 'text-alpha' : score.winner === 'beta' ? 'text-beta' : 'text-gold'}">
+								{score.winner === 'draw' ? 'EMPATE' : `${score.winner.toUpperCase()} WIN`}
+							</span>
+							<span class="text-alpha">{score.alpha}</span>
+							<span class="text-dim">/</span>
+							<span class="text-beta">{score.beta}</span>
+						</div>
+					{/each}
+				</div>
+				{/if}
+			</article>
+		{/each}
+	</section>
+	{/if}
+
+	<!-- ROUNDS LOG (old system) -->
+	{#if !isDebateMode && battle.rounds.length > 0}
 	<section class="rounds-feed stagger-enter" style="animation-delay: 0.3s;">
 		<div class="feed-header font-mono text-muted">>> TRANSMISSION_LOG</div>
 		
@@ -472,6 +589,42 @@
 .cb-alpha { background: var(--alpha-neon); height: 100%; box-shadow: 0 0 5px var(--alpha-dim);}
 .cb-beta { background: var(--beta-neon); height: 100%; box-shadow: 0 0 5px var(--beta-dim);}
 
+/* ── EJES FEED (new debate system) ── */
+.ejes-feed { display: flex; flex-direction: column; gap: 2rem; }
+.current-eje-card {
+	background: rgba(255, 190, 11, 0.05);
+	border: 1px solid rgba(255, 190, 11, 0.3);
+	border-left: 4px solid var(--gold);
+	padding: 1.5rem;
+}
+.eje-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.eje-number { font-size: 1.5rem; letter-spacing: 2px; }
+.eje-phase { font-size: 0.65rem; }
+.eje-timer {
+	font-size: 1.2rem; font-weight: 700; color: var(--beta-neon);
+	padding: 2px 10px; border: 1px solid var(--beta-neon); background: var(--beta-dim);
+}
+.timer-warning { color: var(--alpha-neon); border-color: var(--alpha-neon); background: var(--alpha-dim); animation: pulse-neon 0.5s infinite alternate; }
+.eje-question { font-size: 1rem; color: var(--text); line-height: 1.5; }
+.eje-card { border-left: 2px solid var(--border); padding-left: 2rem; }
+.eje-card-header {
+	font-size: 1rem; letter-spacing: 2px; margin-bottom: 1.5rem;
+	color: var(--text-muted); padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+}
+.phase-block { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--border); background: rgba(255,255,255,0.01); }
+.phase-label { font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.5rem; }
+.phase-argument { font-size: 0.9rem; line-height: 1.7; color: var(--text); }
+.synthesis-panel {
+	background: rgba(57, 255, 20, 0.05); border: 1px solid rgba(57, 255, 20, 0.2);
+	border-left: 4px solid var(--green); padding: 1.5rem; margin-top: 1rem;
+}
+.synthesis-header { font-size: 0.75rem; letter-spacing: 2px; margin-bottom: 0.75rem; }
+.synthesis-body { font-size: 0.85rem; line-height: 1.8; color: var(--text); }
+.panel-scores { background: rgba(255, 190, 11, 0.03); border: 1px solid rgba(255, 190, 11, 0.15); padding: 1rem; margin-top: 1rem; }
+.panel-header { font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.75rem; }
+.score-row { display: flex; gap: 1.5rem; font-size: 0.75rem; padding: 0.25rem 0; border-bottom: 1px solid var(--border); }
+.score-row:last-child { border-bottom: none; }
+
 /* ── SHARE ── */
 .share-footer {
 	margin-top: 2rem; padding: 2rem;
@@ -489,5 +642,7 @@
 	.split-args { grid-template-columns: 1fr; gap: 1rem; }
 	.share-footer { flex-direction: column; gap: 2rem; text-align: center; }
 	.topic { font-size: 2.5rem; }
+	.eje-header { flex-wrap: wrap; }
+	.score-row { flex-wrap: wrap; gap: 0.5rem; }
 }
 </style>

@@ -6,7 +6,7 @@ export interface Contender {
 	side: 'alpha' | 'beta';
 	name: string;
 	stance: string;
-	device: string;
+	model: string;
 }
 
 export interface RoundScores {
@@ -28,6 +28,38 @@ export interface Round {
 	verdict: string;
 	scores: RoundScores | null;
 }
+
+// ─── Debate system types ───────────────────────────────────────────────────────
+
+export interface DebatePhase {
+	type: string;
+	side: string | null;
+	argument: string | null;
+	synthesis: string | null;
+}
+
+export interface DebateEje {
+	number: number;
+	question: string;
+	phases: DebatePhase[];
+	scores: { judge: string; winner: string; alpha: number; beta: number }[];
+}
+
+export interface DebateConfig {
+	mode: 'manual' | 'random';
+	methodology: string;
+	max_ejes: number;
+	moderator_enabled: boolean;
+	timers: {
+		total_minutes: number;
+		opening_seconds: number;
+		cross_seconds: number;
+		synthesis_seconds: number;
+		present_seconds: number;
+	};
+}
+
+// ─── Chess types ────────────────────────────────────────────────────────────────
 
 export interface ChessMove {
 	move_number: number;
@@ -53,6 +85,7 @@ export interface ChessState {
 export interface Battle {
 	battle_id: string;
 	topic: string;
+	game_mode?: 'debate' | 'chess';
 	status: BattleStatus;
 	contenders: {
 		alpha: Contender | null;
@@ -62,6 +95,12 @@ export interface Battle {
 	chess?: ChessState;
 	final_winner: 'alpha' | 'beta' | 'draw' | null;
 	spectator_count: number;
+	// New debate system fields
+	current_eje?: number;
+	current_phase?: string;
+	phase_label?: string;
+	ejes?: DebateEje[];
+	config?: DebateConfig;
 }
 
 export interface ActiveBattle {
