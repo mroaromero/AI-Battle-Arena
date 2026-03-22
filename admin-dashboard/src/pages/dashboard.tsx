@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { setLocale, getCurrentLocale } from '../lib/i18n';
 import {
   IconRefresh, IconCheck, IconX, IconKey, IconSword,
   IconSettings, IconLoader2, IconEye, IconEyeOff,
-  IconPlus, IconTrash, IconCopy, IconUsers, IconTrophy,
+  IconPlus, IconTrash, IconCopy, IconUsers, IconTrophy, IconLanguage,
 } from '@tabler/icons-react';
 import { getSecret, clearSession } from '../lib/auth';
 import { api, type AdminStatus, type BattleRoom } from '../lib/api';
@@ -142,8 +144,16 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const secret   = getSecret();
   const { toast, show: showToast } = useToast();
+  const [lang, setLang] = useState(getCurrentLocale());
+
+  function toggleLang() {
+    const newLang = lang === 'es' ? 'en' : 'es';
+    setLang(newLang);
+    setLocale(newLang);
+  }
 
   const [status,  setStatus]  = useState<AdminStatus | null>(null);
   const [config,  setConfig]  = useState<Record<string, string>>({});
@@ -430,16 +440,24 @@ export function DashboardPage() {
         </div>
         <div className="flex items-center justify-between gap-4">
           <h1 className="font-display text-2xl font-bold uppercase tracking-widest text-text">
-            ÁRBITRO <span className="text-alpha">IA</span>
+            {t('dashboard.title')}
           </h1>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-widest text-textMuted hover:text-text border border-borderBright hover:border-borderBright px-3 py-1.5 transition-colors disabled:opacity-40"
-          >
-            <IconRefresh size={12} className={loading ? 'animate-spin' : ''} />
-            ACTUALIZAR
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleLang}
+              className="flex items-center gap-1.5 font-mono text-[0.6rem] uppercase tracking-widest text-gold hover:text-white border border-gold/60 hover:border-gold px-3 py-1.5 transition-colors"
+            >
+              {lang === 'es' ? 'EN' : 'ES'}
+            </button>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-widest text-textMuted hover:text-text border border-borderBright hover:border-borderBright px-3 py-1.5 transition-colors disabled:opacity-40"
+            >
+              <IconRefresh size={12} className={loading ? 'animate-spin' : ''} />
+              {t('dashboard.refresh')}
+            </button>
+          </div>
         </div>
         <div className="h-px bg-gradient-to-r from-alpha via-borderBright to-transparent mt-3" />
       </div>
@@ -447,22 +465,22 @@ export function DashboardPage() {
       {/* ── STAT CARDS ──────────────────────────────────────────────── */}
       {status && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <StatCard label="TOTAL BATALLAS" value={status.battles.total}     color="text-text" />
-          <StatCard label="EN ESPERA"       value={status.battles.waiting}   color="text-gold" />
-          <StatCard label="EN COMBATE"      value={status.battles.active}    color="text-beta" />
-          <StatCard label="FINALIZADAS"     value={status.battles.completed} color="text-green" />
+          <StatCard label={t('stats.total')}     value={status.battles.total}     color="text-text" />
+          <StatCard label={t('stats.waiting')}   value={status.battles.waiting}   color="text-gold" />
+          <StatCard label={t('stats.active')}    value={status.battles.active}    color="text-beta" />
+          <StatCard label={t('stats.completed')} value={status.battles.completed} color="text-green" />
         </div>
       )}
 
       {/* Server meta */}
       {status && (
         <div className="flex flex-wrap items-center gap-5 mb-8 font-mono text-[0.55rem] uppercase text-textDim">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
-            SERVIDOR ONLINE
-          </span>
-          <span>v{status.version}</span>
-          <span>UPTIME {formatUptime(status.uptime)}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
+              {t('dashboard.server_online')}
+            </span>
+            <span>{t('dashboard.version')}{status.version}</span>
+            <span>{t('dashboard.uptime')} {formatUptime(status.uptime)}</span>
         </div>
       )}
 
@@ -475,7 +493,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-3 mb-4">
               <IconKey size={14} className="text-alpha shrink-0" />
               <span className="font-mono text-[0.6rem] text-alpha uppercase tracking-widest">
-                CREDENCIALES DE PROVEEDORES IA
+                {t("config.api_keys")}
               </span>
               <div className="flex-1 h-px bg-alpha/20" />
             </div>
@@ -499,7 +517,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-3 mb-4">
               <IconSword size={14} className="text-gold shrink-0" />
               <span className="font-mono text-[0.6rem] text-gold uppercase tracking-widest">
-                PARÁMETROS DE COMBATE
+                {t("config.combat_params")}
               </span>
               <div className="flex-1 h-px bg-gold/20" />
             </div>
@@ -523,7 +541,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-3 mb-4">
               <IconSettings size={14} className="text-beta shrink-0" />
               <span className="font-mono text-[0.6rem] text-beta uppercase tracking-widest">
-                OTROS PARÁMETROS
+                {t("config.other_params")}
               </span>
               <div className="flex-1 h-px bg-beta/20" />
             </div>
@@ -576,7 +594,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-3 mb-6">
           <IconUsers size={14} className="text-beta shrink-0" />
           <span className="font-mono text-[0.6rem] text-beta uppercase tracking-widest">
-            GESTIÓN DE SALAS
+            {t("rooms.title")}
           </span>
           <div className="flex-1 h-px bg-beta/20" />
         </div>
@@ -584,7 +602,7 @@ export function DashboardPage() {
         {/* Create rooms form */}
         <form onSubmit={handleCreateRooms} className="border border-borderBright bg-surface p-5 mb-6">
           <div className="font-mono text-[0.55rem] text-textDim uppercase tracking-widest mb-4">
-            CREAR SALAS
+            {t("rooms.create")}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
@@ -738,7 +756,7 @@ export function DashboardPage() {
         <div className="flex items-center gap-3 mb-6">
           <IconTrophy size={14} className="text-gold shrink-0" />
           <span className="font-mono text-[0.6rem] text-gold uppercase tracking-widest">
-            TORNEOS
+            {t("tournaments.title")}
           </span>
           <div className="flex-1 h-px bg-gold/20" />
         </div>
@@ -746,7 +764,7 @@ export function DashboardPage() {
         {/* Create tournament form */}
         <form onSubmit={handleCreateTournament} className="border border-borderBright bg-surface p-5 mb-6">
           <div className="font-mono text-[0.55rem] text-textDim uppercase tracking-widest mb-4">
-            CREAR TORNEO
+            {t("tournaments.create")}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
@@ -845,7 +863,7 @@ export function DashboardPage() {
             {creatingTournament ? (
               <span className="flex items-center justify-center gap-2"><IconLoader2 size={13} className="animate-spin" /> CREANDO TORNEO...</span>
             ) : (
-              <span className="flex items-center justify-center gap-2"><IconTrophy size={13} /> CREAR TORNEO</span>
+              <span className="flex items-center justify-center gap-2"><IconTrophy size={13} /> {t("tournaments.create")}</span>
             )}
           </button>
         </form>

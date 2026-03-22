@@ -1,0 +1,110 @@
+{
+  "login": {
+    "title": "PANEL DE CONTROL",
+    "subtitle": "// ACCESO RESTRINGIDO //",
+    "secret_label": "INGRESA TU LLAVE DE ACCESO",
+    "secret_placeholder": "ADMIN_SECRET",
+    "btn": "[ ACCEDER ]",
+    "error": "CREDENCIALES INVÁLIDAS",
+    "connecting": "CONECTANDO..."
+  },
+  "dashboard": {
+    "title": "ÁRBITRO IA",
+    "refresh": "ACTUALIZAR",
+    "server_online": "SERVIDOR ONLINE",
+    "uptime": "UPTIME",
+    "version": "v",
+    "logout": "SALIR"
+  },
+  "stats": {
+    "total": "TOTAL BATALLAS",
+    "waiting": "EN ESPERA",
+    "active": "EN COMBATE",
+    "completed": "FINALIZADAS"
+  },
+  "config": {
+    "api_keys": "CREDENCIALES DE PROVEEDORES IA",
+    "combat_params": "PARÁMETROS DE COMBATE",
+    "other_params": "OTROS PARÁMETROS",
+    "save": "[ APLICAR CAMBIOS ]",
+    "saving": "APLICANDO CONFIGURACIÓN...",
+    "saved": "CONFIGURACIÓN APLICADA EXITOSAMENTE",
+    "discard": "Descartar cambios",
+    "no_changes": "[ SIN CAMBIOS PENDIENTES ]",
+    "configured": "CONFIG",
+    "empty": "VACÍO",
+    "edited": "EDITADO"
+  },
+  "rooms": {
+    "title": "GESTIÓN DE SALAS",
+    "create": "CREAR SALAS",
+    "topic_label": "TEMA DEL DEBATE",
+    "topic_placeholder": "¿La IA reemplazará a los profesores?",
+    "count_label": "CANTIDAD",
+    "mode_label": "MODO",
+    "debate": "DEBATE",
+    "chess": "AJEDREZ",
+    "rounds_label": "RONDAS",
+    "alpha_stance": "POSTURA ALPHA",
+    "alpha_placeholder": "A favor de la IA en educación",
+    "beta_stance": "POSTURA BETA",
+    "beta_placeholder": "Defensa del docente humano",
+    "create_btn": "CREAR",
+    "creating": "CREANDO...",
+    "create_multiple": "CREAR {count} SALAS",
+    "create_one": "CREAR SALA",
+    "no_rooms": "SIN SALAS ACTIVAS",
+    "no_rooms_sub": "Las salas activas aparecerán aquí.",
+    "copy_id": "COPIAR ID",
+    "copied": "COPIADO",
+    "loading": "Cargando salas...",
+    "debate_config": "CONFIGURACIÓN DE DEBATE",
+    "ejes_label": "EJES DE DEBATE (SUB-PREGUNTAS)",
+    "judges_label": "PANEL DE JUECES",
+    "methodology_label": "METODOLOGÍA DE EVALUACIÓN",
+    "logic": "LÓGICA (50% coherencia, 35% evidencia, 15% retórica)",
+    "rhetoric": "RETÓRICA (20% coherencia, 25% evidencia, 55% retórica)",
+    "academic": "ACADÉMICA (30% coherencia, 50% evidencia, 20% retórica)",
+    "moderator": "MODERADOR LLM (síntesis + detección de falacias)",
+    "timer_total": "TOTAL (MIN)",
+    "timer_opening": "APERTURA (S)",
+    "timer_cross": "CRUCE (S)",
+    "timer_synthesis": "SÍNTESIS (S)"
+  },
+  "tournaments": {
+    "title": "TORNEOS",
+    "create": "CREAR TORNEO",
+    "creating": "CREANDO TORNEO...",
+    "name_label": "NOMBRE DEL TORNEO",
+    "name_placeholder": "Copa IA 2026",
+    "topic_label": "TEMA DEL DEBATE",
+    "mode_label": "MODO",
+    "bracket_label": "BRACKET",
+    "single_elim": "ELIMINACIÓN SIMPLE",
+    "round_robin": "ROUND ROBIN",
+    "participants_label": "PARTICIPANTES",
+    "add_btn": "+ ADD",
+    "contender_placeholder": "Contender",
+    "model_placeholder": "Modelo",
+    "ejes_label": "EJES DE DEBATE",
+    "no_tournaments": "Sin torneos",
+    "created": "TORNEO CREADO",
+    "deleted": "TORNEO ELIMINADO",
+    "min_participants": "MÍNIMO 2 PARTICIPANTES"
+  },
+  "status": {
+    "waiting": "ESPERANDO",
+    "active": "ACTIVO",
+    "judging": "EVALUANDO",
+    "finished": "TERMINADO",
+    "eliminacion": "ELIMINACIÓN",
+    "round_robin": "ROUND ROBIN"
+  },
+  "toast": {
+    "ok_prefix": "✅",
+    "err_prefix": "❌"
+  },
+  "lang": {
+    "toggle": "ES/EN"
+  }
+}

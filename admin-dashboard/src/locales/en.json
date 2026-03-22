@@ -1,0 +1,110 @@
+{
+  "login": {
+    "title": "CONTROL PANEL",
+    "subtitle": "// RESTRICTED ACCESS //",
+    "secret_label": "ENTER YOUR ACCESS KEY",
+    "secret_placeholder": "ADMIN_SECRET",
+    "btn": "[ LOGIN ]",
+    "error": "INVALID CREDENTIALS",
+    "connecting": "CONNECTING..."
+  },
+  "dashboard": {
+    "title": "AI ARBITER",
+    "refresh": "REFRESH",
+    "server_online": "SERVER ONLINE",
+    "uptime": "UPTIME",
+    "version": "v",
+    "logout": "SIGN OUT"
+  },
+  "stats": {
+    "total": "TOTAL BATTLES",
+    "waiting": "WAITING",
+    "active": "ACTIVE",
+    "completed": "COMPLETED"
+  },
+  "config": {
+    "api_keys": "AI PROVIDER CREDENTIALS",
+    "combat_params": "COMBAT PARAMETERS",
+    "other_params": "OTHER PARAMETERS",
+    "save": "[ APPLY CHANGES ]",
+    "saving": "APPLYING CONFIGURATION...",
+    "saved": "CONFIGURATION APPLIED SUCCESSFULLY",
+    "discard": "Discard changes",
+    "no_changes": "[ NO PENDING CHANGES ]",
+    "configured": "CONFIGURED",
+    "empty": "EMPTY",
+    "edited": "EDITED"
+  },
+  "rooms": {
+    "title": "ROOM MANAGEMENT",
+    "create": "CREATE ROOMS",
+    "topic_label": "DEBATE TOPIC",
+    "topic_placeholder": "Will AI replace teachers?",
+    "count_label": "COUNT",
+    "mode_label": "MODE",
+    "debate": "DEBATE",
+    "chess": "CHESS",
+    "rounds_label": "ROUNDS",
+    "alpha_stance": "ALPHA STANCE",
+    "alpha_placeholder": "In favor of AI in education",
+    "beta_stance": "BETA STANCE",
+    "beta_placeholder": "Defense of human teachers",
+    "create_btn": "CREATE",
+    "creating": "CREATING...",
+    "create_multiple": "CREATE {count} ROOMS",
+    "create_one": "CREATE ROOM",
+    "no_rooms": "NO ACTIVE ROOMS",
+    "no_rooms_sub": "Active rooms will appear here.",
+    "copy_id": "COPY ID",
+    "copied": "COPIED",
+    "loading": "Loading rooms...",
+    "debate_config": "DEBATE CONFIGURATION",
+    "ejes_label": "DEBATE EJES (SUB-QUESTIONS)",
+    "judges_label": "JUDGE PANEL",
+    "methodology_label": "EVALUATION METHODOLOGY",
+    "logic": "LOGIC (50% coherence, 35% evidence, 15% rhetoric)",
+    "rhetoric": "RHETORIC (20% coherence, 25% evidence, 55% rhetoric)",
+    "academic": "ACADEMIC (30% coherence, 50% evidence, 20% rhetoric)",
+    "moderator": "LLM MODERATOR (synthesis + fallacy detection)",
+    "timer_total": "TOTAL (MIN)",
+    "timer_opening": "OPENING (S)",
+    "timer_cross": "CROSS (S)",
+    "timer_synthesis": "SYNTHESIS (S)"
+  },
+  "tournaments": {
+    "title": "TOURNAMENTS",
+    "create": "CREATE TOURNAMENT",
+    "creating": "CREATING TOURNAMENT...",
+    "name_label": "TOURNAMENT NAME",
+    "name_placeholder": "AI Cup 2026",
+    "topic_label": "DEBATE TOPIC",
+    "mode_label": "MODE",
+    "bracket_label": "BRACKET",
+    "single_elim": "SINGLE ELIMINATION",
+    "round_robin": "ROUND ROBIN",
+    "participants_label": "PARTICIPANTS",
+    "add_btn": "+ ADD",
+    "contender_placeholder": "Contender",
+    "model_placeholder": "Model",
+    "ejes_label": "DEBATE EJES",
+    "no_tournaments": "No tournaments",
+    "created": "TOURNAMENT CREATED",
+    "deleted": "TOURNAMENT DELETED",
+    "min_participants": "MINIMUM 2 PARTICIPANTS"
+  },
+  "status": {
+    "waiting": "WAITING",
+    "active": "ACTIVE",
+    "judging": "JUDGING",
+    "finished": "FINISHED",
+    "eliminacion": "ELIMINATION",
+    "round_robin": "ROUND ROBIN"
+  },
+  "toast": {
+    "ok_prefix": "✅",
+    "err_prefix": "❌"
+  },
+  "lang": {
+    "toggle": "ES/EN"
+  }
+}

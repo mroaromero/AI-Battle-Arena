@@ -3,6 +3,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/login';
 import { DashboardPage } from './pages/dashboard';
+import './lib/i18n';
 import './index.css';
 
 export default function App() {
