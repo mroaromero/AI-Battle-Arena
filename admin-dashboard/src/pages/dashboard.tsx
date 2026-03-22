@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { setLocale, getCurrentLocale } from '../lib/i18n';
+import i18n, { setLocale, getCurrentLocale } from '../lib/i18n';
 import {
   IconRefresh, IconCheck, IconX, IconKey, IconSword,
   IconSettings, IconLoader2, IconEye, IconEyeOff,
-  IconPlus, IconTrash, IconCopy, IconUsers, IconTrophy, IconLanguage,
+  IconPlus, IconTrash, IconCopy, IconUsers, IconTrophy,
 } from '@tabler/icons-react';
 import { getSecret, clearSession } from '../lib/auth';
 import { api, type AdminStatus, type BattleRoom } from '../lib/api';
@@ -88,6 +87,7 @@ function SettingRow({
         }`}>
           <span className={`w-1.5 h-1.5 rounded-full ${configured ? 'bg-green animate-pulse' : 'bg-borderBright'}`} />
           {configured ? 'CONFIG' : 'VACÍO'}
+        </div>
       </div>
 
       {/* Input */}
@@ -144,14 +144,14 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const t = i18n.t.bind(i18n);
   const secret   = getSecret();
   const { toast, show: showToast } = useToast();
-  const [lang, setLang] = useState(getCurrentLocale());
+  const [lang, setLangState] = useState(getCurrentLocale());
 
   function toggleLang() {
     const newLang = lang === 'es' ? 'en' : 'es';
-    setLang(newLang);
+    setLangState(newLang);
     setLocale(newLang);
   }
 
@@ -192,6 +192,12 @@ export function DashboardPage() {
     const res = await api.getRooms(secret);
     if (res.data) setRooms(res.data.rooms);
     setRoomsLoading(false);
+  }, [secret]);
+
+  const loadTournaments = useCallback(async () => {
+    if (!secret) return;
+    const res = await api.getTournaments(secret);
+    if (res.data) setTournaments(res.data.tournaments);
   }, [secret]);
 
   const loadData = useCallback(async () => {
@@ -349,12 +355,6 @@ export function DashboardPage() {
     debate_ejes: ['', '', '', '', ''],
   });
   const [creatingTournament, setCreatingTournament] = useState(false);
-
-  const loadTournaments = useCallback(async () => {
-    if (!secret) return;
-    const res = await api.getTournaments(secret);
-    if (res.data) setTournaments(res.data.tournaments);
-  }, [secret]);
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
