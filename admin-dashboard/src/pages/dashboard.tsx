@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   IconRefresh, IconCheck, IconX, IconKey, IconSword,
   IconSettings, IconLoader2, IconEye, IconEyeOff,
-  IconPlus, IconTrash, IconCopy, IconUsers,
+  IconPlus, IconTrash, IconCopy, IconUsers, IconTrophy,
 } from '@tabler/icons-react';
 import { getSecret, clearSession } from '../lib/auth';
 import { api, type AdminStatus, type BattleRoom } from '../lib/api';
@@ -86,8 +86,167 @@ function SettingRow({
         }`}>
           <span className={`w-1.5 h-1.5 rounded-full ${configured ? 'bg-green animate-pulse' : 'bg-borderBright'}`} />
           {configured ? 'CONFIG' : 'VACÍO'}
-        </div>
       </div>
+
+      {/* ── TOURNAMENT MANAGEMENT ────────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="flex items-center gap-3 mb-6">
+          <IconTrophy size={14} className="text-gold shrink-0" />
+          <span className="font-mono text-[0.6rem] text-gold uppercase tracking-widest">
+            TORNEOS
+          </span>
+          <div className="flex-1 h-px bg-gold/20" />
+        </div>
+
+        {/* Create tournament form */}
+        <form onSubmit={handleCreateTournament} className="border border-borderBright bg-surface p-5 mb-6">
+          <div className="font-mono text-[0.55rem] text-textDim uppercase tracking-widest mb-4">
+            CREAR TORNEO
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">NOMBRE DEL TORNEO</label>
+              <input type="text" value={tournamentForm.name}
+                onChange={e => setTournamentForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Copa IA 2026"
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold transition-colors" />
+            </div>
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">TEMA DEL DEBATE</label>
+              <input type="text" value={tournamentForm.topic}
+                onChange={e => setTournamentForm(f => ({ ...f, topic: e.target.value }))}
+                placeholder="¿La IA reemplazará a los profesores?"
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold transition-colors" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">MODO</label>
+              <select value={tournamentForm.game_mode}
+                onChange={e => setTournamentForm(f => ({ ...f, game_mode: e.target.value as any }))}
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-gold transition-colors">
+                <option value="debate">DEBATE</option>
+                <option value="chess">AJEDREZ</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">BRACKET</label>
+              <select value={tournamentForm.bracket_type}
+                onChange={e => setTournamentForm(f => ({ ...f, bracket_type: e.target.value as any }))}
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-gold transition-colors">
+                <option value="single_elimination">ELIMINACIÓN SIMPLE</option>
+                <option value="round_robin">ROUND ROBIN</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">PARTICIPANTES</label>
+              <div className="flex gap-2">
+                <button type="button"
+                  onClick={() => setTournamentForm(f => ({ ...f, participants: [...f.participants, { name: '', model: '' }] }))}
+                  className="font-mono text-[0.6rem] px-2 py-1 border border-borderBright text-gold hover:border-gold">+ ADD</button>
+                <span className="font-mono text-xs text-textDim py-1">{tournamentForm.participants.filter(p => p.name.trim()).length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Participants list */}
+          <div className="space-y-1 mb-4">
+            {tournamentForm.participants.map((p, i) => (
+              <div key={i} className="flex gap-2">
+                <input type="text" value={p.name}
+                  onChange={e => {
+                    const newP = [...tournamentForm.participants];
+                    newP[i] = { ...newP[i], name: e.target.value };
+                    setTournamentForm(f => ({ ...f, participants: newP }));
+                  }}
+                  placeholder={`Contender ${i + 1}`}
+                  className="flex-1 bg-bg border border-borderBright px-2 py-1 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold" />
+                <input type="text" value={p.model}
+                  onChange={e => {
+                    const newP = [...tournamentForm.participants];
+                    newP[i] = { ...newP[i], model: e.target.value };
+                    setTournamentForm(f => ({ ...f, participants: newP }));
+                  }}
+                  placeholder="Modelo"
+                  className="w-32 bg-bg border border-borderBright px-2 py-1 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold" />
+                {tournamentForm.participants.length > 2 && (
+                  <button type="button"
+                    onClick={() => setTournamentForm(f => ({ ...f, participants: f.participants.filter((_, j) => j !== i) }))}
+                    className="text-alpha/50 hover:text-alpha px-1"><IconTrash size={10} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Ejes (debate only) */}
+          {tournamentForm.game_mode === 'debate' && (
+            <div className="mb-4">
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">EJES DE DEBATE</label>
+              {tournamentForm.debate_ejes.map((eje, i) => (
+                <input key={i} type="text" value={eje}
+                  onChange={e => {
+                    const newEjes = [...tournamentForm.debate_ejes];
+                    newEjes[i] = e.target.value;
+                    setTournamentForm(f => ({ ...f, debate_ejes: newEjes }));
+                  }}
+                  placeholder={`Eje ${i + 1}: ¿...?`}
+                  className="w-full bg-bg border border-borderBright px-2 py-1 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold mb-1" />
+              ))}
+            </div>
+          )}
+
+          <button type="submit" disabled={creatingTournament || !tournamentForm.name.trim() || !tournamentForm.topic.trim()}
+            className="w-full bg-gold text-bg font-mono font-extrabold text-[0.65rem] tracking-[0.25em] uppercase py-3 transition-all hover:bg-white hover:text-black disabled:opacity-30 disabled:pointer-events-none">
+            {creatingTournament ? (
+              <span className="flex items-center justify-center gap-2"><IconLoader2 size={13} className="animate-spin" /> CREANDO TORNEO...</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2"><IconTrophy size={13} /> CREAR TORNEO</span>
+            )}
+          </button>
+        </form>
+
+        {/* Tournaments list */}
+        {tournaments.length === 0 ? (
+          <div className="text-center py-8 border border-borderBright bg-surface">
+            <div className="font-display text-2xl text-textDim mb-2">∅</div>
+            <p className="font-mono text-xs text-textDim uppercase tracking-wider">Sin torneos</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {tournaments.map(t => (
+              <div key={t.id} className="border border-borderBright bg-surface p-4 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="tag bg-gold/10 text-gold border border-gold/30 font-mono text-[0.55rem] px-2 py-0.5">
+                      {t.bracket_type === 'single_elimination' ? 'ELIMINACIÓN' : 'ROUND ROBIN'}
+                    </span>
+                    <span className={`tag font-mono text-[0.55rem] px-2 py-0.5 ${
+                      t.status === 'active' ? 'bg-green/10 text-green border border-green/30' :
+                      t.status === 'finished' ? 'bg-surface2 text-textDim border border-borderBright' :
+                      'bg-gold/10 text-gold border border-gold/30'
+                    }`}>
+                      {t.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="font-mono text-xs text-text">{t.name}</div>
+                  <div className="font-mono text-[0.55rem] text-textDim">{t.topic} · {t.participant_count} jugadores · {t.completed_matches}/{t.match_count} partidos</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => handleCopyId(t.id)}
+                    className="flex items-center gap-1 font-mono text-[0.55rem] px-2 py-1.5 border border-borderBright text-textDim hover:text-text hover:border-text transition-colors uppercase">
+                    <IconCopy size={11} /> {copiedId === t.id ? 'COPIADO' : 'COPIAR ID'}
+                  </button>
+                  <button onClick={() => handleDeleteTournament(t.id)}
+                    className="flex items-center gap-1 font-mono text-[0.55rem] px-2 py-1.5 border border-alpha/30 text-alpha/50 hover:text-alpha hover:border-alpha transition-colors uppercase">
+                    <IconTrash size={11} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
 
       {/* Input */}
       <div className="flex items-center gap-2">
@@ -198,8 +357,9 @@ export function DashboardPage() {
     if (configRes.error === 'ERR_AUTH')     { clearSession(); navigate('/login', { replace: true }); return; }
     if (configRes.data)                     setConfig(configRes.data);
     loadRooms();
+    loadTournaments();
     setLoading(false);
-  }, [secret, navigate, loadRooms]);
+  }, [secret, navigate, loadRooms, loadTournaments]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -326,6 +486,72 @@ export function DashboardPage() {
     navigator.clipboard.writeText(id);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Tournament state
+  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [tournamentForm, setTournamentForm] = useState({
+    name: '',
+    topic: '',
+    game_mode: 'debate' as 'debate' | 'chess',
+    bracket_type: 'single_elimination' as 'single_elimination' | 'round_robin',
+    participants: [{ name: '', model: '' }, { name: '', model: '' }, { name: '', model: '' }, { name: '', model: '' }],
+    debate_ejes: ['', '', '', '', ''],
+  });
+  const [creatingTournament, setCreatingTournament] = useState(false);
+
+  const loadTournaments = useCallback(async () => {
+    if (!secret) return;
+    const res = await api.getTournaments(secret);
+    if (res.data) setTournaments(res.data.tournaments);
+  }, [secret]);
+
+  const handleCreateTournament = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!secret || !tournamentForm.name.trim() || !tournamentForm.topic.trim()) return;
+    const validParticipants = tournamentForm.participants.filter(p => p.name.trim());
+    if (validParticipants.length < 2) {
+      showToast('err', 'MÍNIMO 2 PARTICIPANTES');
+      return;
+    }
+    setCreatingTournament(true);
+    let debate_config = undefined;
+    if (tournamentForm.game_mode === 'debate') {
+      const validEjes = tournamentForm.debate_ejes.filter(e => e.trim());
+      if (validEjes.length >= 1) {
+        debate_config = {
+          mode: 'manual', topic: tournamentForm.topic, ejes: validEjes,
+          alpha_stance: '', beta_stance: '', judges: ['anthropic'],
+          methodology: 'retorica', moderator_enabled: true,
+          timers: { total_minutes: 20, opening_seconds: 30, cross_seconds: 120, synthesis_seconds: 45, present_seconds: 15 },
+          max_ejes: validEjes.length,
+        };
+      }
+    }
+    const result = await api.createTournament(secret, {
+      name: tournamentForm.name,
+      topic: tournamentForm.topic,
+      game_mode: tournamentForm.game_mode,
+      bracket_type: tournamentForm.bracket_type,
+      max_participants: validParticipants.length,
+      participants: validParticipants,
+      debate_config,
+    });
+    setCreatingTournament(false);
+    if (result.data) {
+      showToast('ok', `TORNEO CREADO — ${result.data.participants} PARTICIPANTES`);
+      setTournamentForm({ name: '', topic: '', game_mode: 'debate', bracket_type: 'single_elimination', participants: [{ name: '', model: '' }, { name: '', model: '' }, { name: '', model: '' }, { name: '', model: '' }], debate_ejes: ['', '', '', '', ''] });
+      loadTournaments();
+    } else {
+      showToast('err', `ERROR: ${result.error}`);
+    }
+  };
+
+  const handleDeleteTournament = async (id: string) => {
+    if (!secret) return;
+    await api.deleteTournament(secret, id);
+    showToast('ok', 'TORNEO ELIMINADO');
+    loadTournaments();
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────

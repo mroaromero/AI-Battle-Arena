@@ -93,4 +93,29 @@ export const api = {
     request<{ deleted: boolean }>('/admin/rooms/' + battleId, secret, {
       method: 'DELETE',
     }),
+
+  getTournaments: (secret: string) =>
+    request<{ tournaments: any[]; total: number }>('/admin/tournaments', secret),
+
+  getTournament: (secret: string, id: string) =>
+    request<{ tournament: any; participants: any[]; matches: any[] }>('/admin/tournaments/' + id, secret),
+
+  createTournament: (secret: string, body: {
+    name: string;
+    topic: string;
+    game_mode: 'debate' | 'chess';
+    bracket_type: 'single_elimination' | 'round_robin';
+    max_participants: number;
+    participants: { name: string; model: string }[];
+    debate_config?: any;
+  }) =>
+    request<{ tournament_id: string; bracket_url: string; participants: number; first_round_matches: number }>('/admin/tournaments', secret, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteTournament: (secret: string, id: string) =>
+    request<{ deleted: boolean }>('/admin/tournaments/' + id, secret, {
+      method: 'DELETE',
+    }),
 };

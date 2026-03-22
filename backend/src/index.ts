@@ -19,12 +19,16 @@ import {
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, saveChessMove,
   saveDebateConfig, saveDebateEjes,
+  createTournament, getTournament, listTournaments, updateTournamentStatus, setTournamentChampion,
+  addTournamentParticipants, getTournamentParticipants, addTournamentMatches, getTournamentMatches,
+  updateTournamentMatch, advanceTournamentWinner, deleteTournament,
   getAllSettings, getSetting, setSetting, getBattleStats,
 } from "./services/db.js";
+import { generateSingleEliminationBracket, generateRoundRobinBracket } from "./services/tournament-engine.js";
 import { judgeRound } from "./services/judge.js";
 import { createInitialChessState, makeMove } from "./services/chess-engine.js";
 import {
-  buildBattleContext, buildChessContext,
+  generateBattleId, buildBattleContext, buildChessContext,
   determineFinalWinner, ok as apiOk, err as apiErr,
 } from "./services/utils.js";
 import {
@@ -230,6 +234,118 @@ async function runHTTP(): Promise<void> {
       res.json({ ok: true, data: { deleted: true } });
     } catch (e) {
       res.status(500).json({ error: `Error deleting room: ${String(e)}` });
+    }
+  });
+
+  // ── Tournament Management ──────────────────────────────────────────────────
+  app.get("/admin/tournaments", adminLimiter, adminAuth, async (_req, res) => {
+    try {
+      const tournaments = listTournaments();
+      const enriched = tournaments.map(t => {
+        const participants = getTournamentParticipants(t["id"] as string);
+        const matches = getTournamentMatches(t["id"] as string);
+        return {
+          ...t,
+          participant_count: participants.length,
+          match_count: matches.length,
+          completed_matches: matches.filter(m => m["status"] === "finished").length,
+        };
+      });
+      res.json({ ok: true, data: { tournaments: enriched, total: enriched.length } });
+    } catch (e) {
+      res.status(500).json({ error: `Error listing tournaments: ${String(e)}` });
+    }
+  });
+
+  app.get("/admin/tournaments/:id", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const tournament = getTournament(req.params.id);
+      if (!tournament) { res.status(404).json({ error: "Tournament not found" }); return; }
+      const participants = getTournamentParticipants(req.params.id);
+      const matches = getTournamentMatches(req.params.id);
+      res.json({ ok: true, data: { tournament, participants, matches } });
+    } catch (e) {
+      res.status(500).json({ error: `Error getting tournament: ${String(e)}` });
+    }
+  });
+
+  app.post("/admin/tournaments", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const { name, topic, game_mode = "debate", bracket_type = "single_elimination",
+              max_participants = 8, participants, debate_config } = req.body ?? {};
+      if (!name || !topic) {
+        res.status(400).json({ error: "Missing required fields: name, topic" });
+        return;
+      }
+      if (!participants || !Array.isArray(participants) || participants.length < 2) {
+        res.status(400).json({ error: "Need at least 2 participants" });
+        return;
+      }
+
+      const id = createTournament({ name, topic, game_mode, bracket_type, max_participants, debate_config });
+
+      // Generate bracket
+      const participantList = participants.map((p: any, i: number) => ({
+        name: p.name || `Contender ${i + 1}`,
+        model: p.model || "Unknown",
+        position: i + 1,
+      }));
+
+      addTournamentParticipants(id, participantList);
+
+      let bracketResult;
+      if (bracket_type === "round_robin") {
+        const { generateRoundRobinBracket } = await import("./services/tournament-engine.js");
+        bracketResult = generateRoundRobinBracket(id, participantList);
+      } else {
+        const { generateSingleEliminationBracket } = await import("./services/tournament-engine.js");
+        bracketResult = generateSingleEliminationBracket(id, participantList);
+      }
+
+      addTournamentMatches(id, bracketResult.matches.map(m => ({
+        round: m.round,
+        position: m.position,
+        participant_a_id: m.participant_a_id,
+        participant_b_id: m.participant_b_id,
+      })));
+
+      // Create battle rooms for first round matches
+      const firstRoundMatches = bracketResult.matches.filter(m => m.round === 1 && m.participant_a_id && m.participant_b_id);
+      for (const match of firstRoundMatches) {
+        const battleId = generateBattleId();
+        await createBattle(battleId, `${name} — ${topic}`, debate_config ? (debate_config.max_ejes ?? 5) : 3, game_mode as any);
+        if (debate_config) {
+          saveDebateConfig(battleId, debate_config);
+          if (debate_config.ejes) saveDebateEjes(battleId, debate_config.ejes);
+        }
+        const matchId = `${id}_m${match.round}_${match.position}`;
+        updateTournamentMatch(matchId, { battle_id: battleId });
+      }
+
+      updateTournamentStatus(id, "active");
+
+      const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
+      res.json({
+        ok: true,
+        data: {
+          tournament_id: id,
+          bracket_url: `${baseUrl}/tournament/${id}`,
+          participants: participantList.length,
+          first_round_matches: firstRoundMatches.length,
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: `Error creating tournament: ${String(e)}` });
+    }
+  });
+
+  app.delete("/admin/tournaments/:id", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const deleted = deleteTournament(req.params.id);
+      if (!deleted) { res.status(404).json({ error: "Tournament not found" }); return; }
+      res.json({ ok: true, data: { deleted: true } });
+    } catch (e) {
+      res.status(500).json({ error: `Error deleting tournament: ${String(e)}` });
     }
   });
 
@@ -487,6 +603,31 @@ async function runHTTP(): Promise<void> {
       res.json(apiOk({ entries, total: entries.length }));
     } catch (e) {
       res.status(500).json(apiErr(`Error loading leaderboard: ${String(e)}`));
+    }
+  });
+
+  // 3d. GET /api/tournaments/:id — Public tournament view
+  app.get("/api/tournaments/:id", apiLimiter, async (req, res) => {
+    try {
+      const tournament = getTournament(req.params.id);
+      if (!tournament) { res.status(404).json(apiErr("Tournament not found")); return; }
+      const participants = getTournamentParticipants(req.params.id);
+      const matches = getTournamentMatches(req.params.id);
+      res.json(apiOk({
+        tournament,
+        participants,
+        matches: matches.map(m => ({
+          round: m["round"],
+          position: m["position"],
+          battle_id: m["battle_id"],
+          participant_a: participants.find(p => p["id"] === m["participant_a_id"]),
+          participant_b: participants.find(p => p["id"] === m["participant_b_id"]),
+          winner: m["winner_participant_id"],
+          status: m["status"],
+        })),
+      }));
+    } catch (e) {
+      res.status(500).json(apiErr(`Error loading tournament: ${String(e)}`));
     }
   });
 

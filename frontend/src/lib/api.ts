@@ -156,6 +156,20 @@ export async function fetchLeaderboard(params: {
 	return data.data.entries;
 }
 
+export interface TournamentData {
+	tournament: any;
+	participants: any[];
+	matches: any[];
+}
+
+export async function fetchTournament(id: string): Promise<TournamentData> {
+	const res = await fetch(`${BASE}/api/tournaments/${id}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+	if (!res.ok) throw new Error(`ERR_HTTP: ${res.status}`);
+	const data = await res.json();
+	if (!data.ok) throw new Error(data.error ?? 'Unknown error');
+	return data.data;
+}
+
 export const api = {
 	listBattles: () => callTool('arena_list_battles'),
 	watchBattle: (battle_id: string) => callTool('arena_watch_battle', { battle_id })

@@ -150,6 +150,49 @@ function initSchema(db: SqlJsDatabase): void {
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
 
+    -- Tournament system
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id                      TEXT PRIMARY KEY,
+      name                    TEXT NOT NULL,
+      topic                   TEXT NOT NULL,
+      game_mode               TEXT NOT NULL DEFAULT 'debate',
+      bracket_type            TEXT NOT NULL DEFAULT 'single_elimination',
+      status                  TEXT NOT NULL DEFAULT 'waiting',
+      max_participants        INTEGER NOT NULL DEFAULT 8,
+      debate_config           TEXT,
+      created_at              TEXT NOT NULL,
+      started_at              TEXT,
+      finished_at             TEXT,
+      champion_participant_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS tournament_participants (
+      id             TEXT PRIMARY KEY,
+      tournament_id  TEXT NOT NULL,
+      position       INTEGER NOT NULL,
+      name           TEXT NOT NULL,
+      model          TEXT NOT NULL,
+      eliminated     INTEGER NOT NULL DEFAULT 0,
+      eliminated_at  TEXT,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      id                     TEXT PRIMARY KEY,
+      tournament_id          TEXT NOT NULL,
+      round                  INTEGER NOT NULL,
+      position               INTEGER NOT NULL,
+      battle_id              TEXT,
+      participant_a_id       TEXT,
+      participant_b_id       TEXT,
+      winner_participant_id  TEXT,
+      status                 TEXT NOT NULL DEFAULT 'pending',
+      created_at             TEXT NOT NULL,
+      finished_at            TEXT,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+      FOREIGN KEY (battle_id) REFERENCES battles(id)
+    );
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -848,6 +891,164 @@ export function getDbSync(): SqlJsDatabase {
     throw new Error("Database not initialized — call getDb() first");
   }
   return (globalThis as any).__battleArenaDb as SqlJsDatabase;
+}
+
+// ─── Tournaments ───────────────────────────────────────────────────────────────
+
+export function createTournament(opts: {
+  name: string;
+  topic: string;
+  game_mode?: string;
+  bracket_type?: string;
+  max_participants?: number;
+  debate_config?: Record<string, unknown> | null;
+}): string {
+  const db = getDbSync();
+  const id = generateBattleId() + generateBattleId(); // 8-char ID for tournaments
+  const now = new Date().toISOString();
+  run(db, `INSERT INTO tournaments (id, name, topic, game_mode, bracket_type, status, max_participants, debate_config, created_at)
+           VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, ?)`,
+    [id, opts.name, opts.topic, opts.game_mode ?? "debate", opts.bracket_type ?? "single_elimination",
+     opts.max_participants ?? 8, opts.debate_config ? JSON.stringify(opts.debate_config) : null, now]);
+  persist(db);
+  return id;
+}
+
+export function getTournament(id: string): Record<string, unknown> | null {
+  const db = getDbSync();
+  return queryOne(db, "SELECT * FROM tournaments WHERE id = ?", [id]);
+}
+
+export function listTournaments(): Record<string, unknown>[] {
+  const db = getDbSync();
+  return queryAll(db, "SELECT * FROM tournaments ORDER BY created_at DESC");
+}
+
+export function updateTournamentStatus(id: string, status: string): void {
+  const db = getDbSync();
+  const now = new Date().toISOString();
+  if (status === "active") {
+    run(db, "UPDATE tournaments SET status = ?, started_at = ? WHERE id = ?", [status, now, id]);
+  } else if (status === "finished") {
+    run(db, "UPDATE tournaments SET status = ?, finished_at = ? WHERE id = ?", [status, now, id]);
+  } else {
+    run(db, "UPDATE tournaments SET status = ? WHERE id = ?", [status, id]);
+  }
+  persist(db);
+}
+
+export function setTournamentChampion(id: string, participantId: string): void {
+  const db = getDbSync();
+  run(db, "UPDATE tournaments SET champion_participant_id = ? WHERE id = ?", [participantId, id]);
+  persist(db);
+}
+
+export function addTournamentParticipants(tournamentId: string, participants: { name: string; model: string; position: number }[]): void {
+  const db = getDbSync();
+  for (const p of participants) {
+    run(db, `INSERT INTO tournament_participants (id, tournament_id, position, name, model, eliminated)
+             VALUES (?, ?, ?, ?, ?, 0)`,
+      [`${tournamentId}_p${p.position}`, tournamentId, p.position, p.name, p.model]);
+  }
+  persist(db);
+}
+
+export function getTournamentParticipants(tournamentId: string): Record<string, unknown>[] {
+  const db = getDbSync();
+  return queryAll(db, "SELECT * FROM tournament_participants WHERE tournament_id = ? ORDER BY position", [tournamentId]);
+}
+
+export function addTournamentMatches(tournamentId: string, matches: { round: number; position: number; participant_a_id: string | null; participant_b_id: string | null }[]): void {
+  const db = getDbSync();
+  for (const m of matches) {
+    run(db, `INSERT INTO tournament_matches (id, tournament_id, round, position, battle_id, participant_a_id, participant_b_id, winner_participant_id, status, created_at)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, 'pending', ?)`,
+      [`${tournamentId}_m${m.round}_${m.position}`, tournamentId, m.round, m.position, m.participant_a_id, m.participant_b_id, new Date().toISOString()]);
+  }
+  persist(db);
+}
+
+export function getTournamentMatches(tournamentId: string): Record<string, unknown>[] {
+  const db = getDbSync();
+  return queryAll(db, "SELECT * FROM tournament_matches WHERE tournament_id = ? ORDER BY round, position", [tournamentId]);
+}
+
+export function getTournamentMatch(tournamentId: string, round: number, position: number): Record<string, unknown> | null {
+  const db = getDbSync();
+  return queryOne(db, "SELECT * FROM tournament_matches WHERE tournament_id = ? AND round = ? AND position = ?", [tournamentId, round, position]);
+}
+
+export function updateTournamentMatch(matchId: string, opts: { battle_id?: string; winner_participant_id?: string; status?: string }): void {
+  const db = getDbSync();
+  const now = new Date().toISOString();
+  if (opts.battle_id) {
+    run(db, "UPDATE tournament_matches SET battle_id = ?, status = 'active' WHERE id = ?", [opts.battle_id, matchId]);
+  }
+  if (opts.winner_participant_id) {
+    run(db, "UPDATE tournament_matches SET winner_participant_id = ?, status = 'finished', finished_at = ? WHERE id = ?",
+      [opts.winner_participant_id, now, matchId]);
+    // Eliminate the loser
+    const match = queryOne<{ participant_a_id: string; participant_b_id: string; tournament_id: string }>(db, "SELECT participant_a_id, participant_b_id, tournament_id FROM tournament_matches WHERE id = ?", [matchId]);
+    if (match) {
+      const loser = opts.winner_participant_id === match.participant_a_id ? match.participant_b_id : match.participant_a_id;
+      if (loser) {
+        run(db, "UPDATE tournament_participants SET eliminated = 1, eliminated_at = ? WHERE id = ?", [now, loser]);
+      }
+    }
+  }
+  if (opts.status && !opts.battle_id && !opts.winner_participant_id) {
+    run(db, "UPDATE tournament_matches SET status = ? WHERE id = ?", [opts.status, matchId]);
+  }
+  persist(db);
+}
+
+export function advanceTournamentWinner(tournamentId: string, completedMatch: Record<string, unknown>): void {
+  const db = getDbSync();
+  const winner = completedMatch["winner_participant_id"] as string;
+  if (!winner) return;
+
+  const round = completedMatch["round"] as number;
+  const position = completedMatch["position"] as number;
+  const nextRound = round + 1;
+  const nextPosition = Math.ceil(position / 2);
+  const isAlphaSlot = position % 2 === 1;
+
+  const nextMatch = getTournamentMatch(tournamentId, nextRound, nextPosition);
+  if (!nextMatch) return;  // This was the final
+
+  if (isAlphaSlot) {
+    run(db, "UPDATE tournament_matches SET participant_a_id = ? WHERE id = ?", [winner, nextMatch["id"] as string]);
+  } else {
+    run(db, "UPDATE tournament_matches SET participant_b_id = ? WHERE id = ?", [winner, nextMatch["id"] as string]);
+  }
+
+  // Check for bye auto-advance
+  const updated = getTournamentMatch(tournamentId, nextRound, nextPosition);
+  if (updated) {
+    const a = updated["participant_a_id"] as string | null;
+    const b = updated["participant_b_id"] as string | null;
+    if (a && !b) {
+      run(db, "UPDATE tournament_matches SET winner_participant_id = ?, status = 'finished', finished_at = ? WHERE id = ?",
+        [a, new Date().toISOString(), updated["id"] as string]);
+      advanceTournamentWinner(tournamentId, { ...updated, winner_participant_id: a });
+    } else if (!a && b) {
+      run(db, "UPDATE tournament_matches SET winner_participant_id = ?, status = 'finished', finished_at = ? WHERE id = ?",
+        [b, new Date().toISOString(), updated["id"] as string]);
+      advanceTournamentWinner(tournamentId, { ...updated, winner_participant_id: b });
+    }
+  }
+  persist(db);
+}
+
+export function deleteTournament(tournamentId: string): boolean {
+  const db = getDbSync();
+  const t = queryOne(db, "SELECT id FROM tournaments WHERE id = ?", [tournamentId]);
+  if (!t) return false;
+  run(db, "DELETE FROM tournament_matches WHERE tournament_id = ?", [tournamentId]);
+  run(db, "DELETE FROM tournament_participants WHERE tournament_id = ?", [tournamentId]);
+  run(db, "DELETE FROM tournaments WHERE id = ?", [tournamentId]);
+  persist(db);
+  return true;
 }
 
 export async function getBattleStats(): Promise<{
