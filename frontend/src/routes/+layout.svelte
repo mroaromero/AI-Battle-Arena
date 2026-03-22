@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import '../lib/i18n';
+	import '$lib/i18n';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { t, locale } from 'svelte-i18n';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '../lib/i18n';
+	import '$lib/i18n';
 	import { onMount, onDestroy } from 'svelte';
 	import { t } from 'svelte-i18n';
 	import { api } from '$lib/api';
