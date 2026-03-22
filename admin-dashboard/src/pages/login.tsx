@@ -105,7 +105,7 @@ export function LoginPage() {
       </div>
 
       {/* Main login card */}
-      <div className="w-full max-w-xs relative">
+      <div className="w-full max-w-sm relative">
         {/* Corner accents */}
         <div className="absolute -top-px -left-px w-3 h-3 border-l-2 border-t-2 border-alpha pointer-events-none" />
         <div className="absolute -top-px -right-px w-3 h-3 border-r-2 border-t-2 border-alpha pointer-events-none" />
