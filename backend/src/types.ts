@@ -10,7 +10,7 @@ export interface Contender {
   side: ContenderSide;
   name: string;
   stance: string;        // e.g. "Defensor de la IA en educación" | "Blancas" | "Negras"
-  device: string;        // e.g. "Claude Desktop · macOS"
+  model: string;         // e.g. "Opus 4.6" | "GPT-4o" | "Gemini 2.5"
   connected_at: string;  // ISO timestamp
 }
 

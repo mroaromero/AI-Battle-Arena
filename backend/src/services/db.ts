@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { Battle, Contender, Round, RoundScores, BattleStatus, RoundWinner, GameMode, ChessGameState, ContenderSide } from "../types.js";
+import { generateBattleId } from "./utils.js";
+import { initUsersSchema } from "./auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
@@ -26,6 +28,7 @@ async function getDb(): Promise<SqlJsDatabase> {
   }
 
   initSchema(_db);
+  initUsersSchema(_db);
   return _db;
 }
 
@@ -141,7 +144,7 @@ function assembleBattle(
       side: c["side"] as "alpha" | "beta",
       name: c["name"] as string,
       stance: c["stance"] as string,
-      device: c["device"] as string,
+      model: c["device"] as string,
       connected_at: c["connected_at"] as string,
     };
   }
@@ -489,6 +492,120 @@ export async function listArchivedBattles(opts: {
   }));
 
   return { battles, total };
+}
+
+// ─── Room management (admin) ─────────────────────────────────────────────────
+
+export interface BattleRoom {
+  id: string;
+  topic: string;
+  game_mode: GameMode;
+  status: string;
+  max_rounds: number;
+  alpha_name: string | null;
+  beta_name: string | null;
+  alpha_model: string | null;
+  beta_model: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  final_winner: string | null;
+}
+
+export async function createBattleRooms(opts: {
+  count: number;
+  topic: string;
+  alpha_stance: string;
+  beta_stance: string;
+  game_mode?: GameMode;
+  max_rounds?: number;
+  room_prefix?: string;
+}): Promise<string[]> {
+  const ids: string[] = [];
+  const gameMode = opts.game_mode ?? "debate";
+  const maxRounds = opts.max_rounds ?? 3;
+
+  for (let i = 0; i < opts.count; i++) {
+    const id = generateBattleId();
+    const topic = opts.count > 1 ? `${opts.topic} (Sala ${i + 1})` : opts.topic;
+    const db = await getDb();
+    const now = new Date().toISOString();
+
+    run(db, `
+      INSERT INTO battles (id, topic, game_mode, status, max_rounds, current_round, spectator_count, created_at)
+      VALUES (?, ?, ?, 'waiting', ?, 0, 0, ?)
+    `, [id, topic, gameMode, maxRounds, now]);
+
+    // Pre-register contenders with their stances
+    run(db, `
+      INSERT OR REPLACE INTO contenders (battle_id, side, name, stance, device, connected_at)
+      VALUES (?, 'alpha', 'Esperando...', ?, '', ?)
+    `, [id, opts.alpha_stance, now]);
+
+    run(db, `
+      INSERT OR REPLACE INTO contenders (battle_id, side, name, stance, device, connected_at)
+      VALUES (?, 'beta', 'Esperando...', ?, '', ?)
+    `, [id, opts.beta_stance, now]);
+
+    // If chess, initialize chess state
+    if (gameMode === "chess") {
+      const { createInitialChessState } = await import("./chess-engine.js");
+      const initialState = createInitialChessState();
+      run(db, `
+        INSERT INTO chess_games (battle_id, fen, pgn, moves_json, last_side, updated_at)
+        VALUES (?, ?, '', '[]', null, ?)
+      `, [id, initialState.fen, now]);
+    }
+
+    ids.push(id);
+  }
+
+  return ids;
+}
+
+export async function listBattleRooms(): Promise<BattleRoom[]> {
+  const db = await getDb();
+  const rows = queryAll<Record<string, unknown>>(
+    db,
+    `SELECT
+       b.id, b.topic, b.game_mode, b.status, b.max_rounds,
+       b.created_at, b.started_at, b.finished_at, b.final_winner,
+       c1.name as alpha_name, c1.stance as alpha_stance, c1.device as alpha_model,
+       c2.name as beta_name, c2.stance as beta_stance, c2.device as beta_model
+     FROM battles b
+     LEFT JOIN contenders c1 ON c1.battle_id = b.id AND c1.side = 'alpha'
+     LEFT JOIN contenders c2 ON c2.battle_id = b.id AND c2.side = 'beta'
+     WHERE b.status != 'finished'
+     ORDER BY b.created_at DESC`
+  );
+
+  return rows.map(r => ({
+    id: r["id"] as string,
+    topic: r["topic"] as string,
+    game_mode: (r["game_mode"] as GameMode) ?? "debate",
+    status: r["status"] as string,
+    max_rounds: r["max_rounds"] as number,
+    alpha_name: (r["alpha_name"] as string) === "Esperando..." ? null : (r["alpha_name"] as string | null),
+    beta_name: (r["beta_name"] as string) === "Esperando..." ? null : (r["beta_name"] as string | null),
+    alpha_model: (r["alpha_model"] as string) || null,
+    beta_model: (r["beta_model"] as string) || null,
+    created_at: r["created_at"] as string,
+    started_at: r["started_at"] as string | null,
+    finished_at: r["finished_at"] as string | null,
+    final_winner: r["final_winner"] as string | null,
+  }));
+}
+
+export async function deleteBattleRoom(battleId: string): Promise<boolean> {
+  const db = await getDb();
+  const battle = queryOne(db, "SELECT id FROM battles WHERE id = ?", [battleId]);
+  if (!battle) return false;
+
+  run(db, "DELETE FROM rounds WHERE battle_id = ?", [battleId]);
+  run(db, "DELETE FROM chess_games WHERE battle_id = ?", [battleId]);
+  run(db, "DELETE FROM contenders WHERE battle_id = ?", [battleId]);
+  run(db, "DELETE FROM battles WHERE id = ?", [battleId]);
+  return true;
 }
 
 export async function getBattleStats(): Promise<{

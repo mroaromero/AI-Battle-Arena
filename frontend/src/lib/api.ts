@@ -77,6 +77,59 @@ export async function fetchArchive(params: {
 	return data.data;
 }
 
+// ─── Auth API ──────────────────────────────────────────────────────────────────
+
+export interface User {
+	id: string;
+	google_id: string;
+	email: string;
+	display_name: string;
+	avatar_url: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export async function fetchMe(): Promise<User | null> {
+	try {
+		const res = await fetch(`${BASE}/auth/me`, { credentials: 'include' });
+		if (!res.ok) return null;
+		const data = await res.json();
+		return data.data?.user ?? null;
+	} catch {
+		return null;
+	}
+}
+
+export function loginWithGoogle(): void {
+	const frontendUrl = window.location.origin;
+	window.location.href = `${BASE}/auth/google/login?redirect=${encodeURIComponent(frontendUrl)}`;
+}
+
+export async function logout(): Promise<void> {
+	await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+}
+
+export async function updateProfile(display_name: string): Promise<User> {
+	const res = await fetch(`${BASE}/auth/profile`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ display_name }),
+	});
+	const data = await res.json();
+	if (!data.ok) throw new Error(data.error);
+	return data.data.user;
+}
+
+export async function deleteAccount(): Promise<void> {
+	const res = await fetch(`${BASE}/auth/account`, {
+		method: 'DELETE',
+		credentials: 'include',
+	});
+	const data = await res.json();
+	if (!data.ok) throw new Error(data.error);
+}
+
 export const api = {
 	listBattles: () => callTool('arena_list_battles'),
 	watchBattle: (battle_id: string) => callTool('arena_watch_battle', { battle_id })

@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import swaggerJSDoc from "swagger-jsdoc";
@@ -13,20 +14,28 @@ import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
 import {
   getAllSettings, getSetting, setSetting, getBattleStats,
   createBattle, getBattle, addContender, updateBattleStatus,
-  listActiveBattles, listArchivedBattles, saveArgument, saveJudgeVerdict,
+  listActiveBattles, listArchivedBattles, listBattleRooms, createBattleRooms, deleteBattleRoom,
+  saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, saveChessMove,
 } from "./services/db.js";
 import { judgeRound } from "./services/judge.js";
 import { createInitialChessState, makeMove } from "./services/chess-engine.js";
 import {
-  generateBattleId, buildBattleContext, buildChessContext,
+  buildBattleContext, buildChessContext,
   determineFinalWinner, ok as apiOk, err as apiErr,
 } from "./services/utils.js";
+import {
+  getGoogleAuthUrl, exchangeGoogleCode, findOrCreateUser,
+  getUserById, updateUserProfile, deleteUser,
+  createJWT, verifyJWT,
+  type User,
+} from "./services/auth.js";
 
 // ─── Server initialization ────────────────────────────────────────────────────
 
 const VERSION = "2.0.0";
+const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://ai-battle-arena-jade.vercel.app";
 
 const server = new McpServer({
   name: "battle-arena-mcp-server",
@@ -60,6 +69,7 @@ async function runHTTP(): Promise<void> {
   }));
 
   app.use(express.json());
+  app.use(cookieParser());
 
   // ── Health check ─────────────────────────────────────────────────────────────────
   app.get("/health", (_req, res) => {
@@ -159,6 +169,239 @@ async function runHTTP(): Promise<void> {
     res.json({ success: true });
   });
 
+  // ── Admin Room Management ──────────────────────────────────────────────────────
+  app.get("/admin/rooms", adminLimiter, adminAuth, async (_req, res) => {
+    try {
+      const rooms = await listBattleRooms();
+      res.json({ ok: true, data: { rooms, total: rooms.length } });
+    } catch (e) {
+      res.status(500).json({ error: `Error listing rooms: ${String(e)}` });
+    }
+  });
+
+  app.post("/admin/rooms", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const { count = 1, topic, alpha_stance, beta_stance, game_mode = "debate", max_rounds = 3 } = req.body ?? {};
+      if (!topic || !alpha_stance || !beta_stance) {
+        res.status(400).json({ error: "Missing required fields: topic, alpha_stance, beta_stance" });
+        return;
+      }
+      if (count < 1 || count > 50) {
+        res.status(400).json({ error: "Count must be between 1 and 50" });
+        return;
+      }
+      const ids = await createBattleRooms({ count, topic, alpha_stance, beta_stance, game_mode, max_rounds });
+      const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
+      res.json({
+        ok: true,
+        data: {
+          created: ids.length,
+          rooms: ids.map(id => ({
+            battle_id: id,
+            join_url: game_mode === "chess" ? `${baseUrl}/chess/${id}` : `${baseUrl}/live/${id}`,
+          })),
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: `Error creating rooms: ${String(e)}` });
+    }
+  });
+
+  app.delete("/admin/rooms/:id", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const deleted = await deleteBattleRoom(req.params.id.toUpperCase());
+      if (!deleted) { res.status(404).json({ error: "Room not found" }); return; }
+      res.json({ ok: true, data: { deleted: true } });
+    } catch (e) {
+      res.status(500).json({ error: `Error deleting room: ${String(e)}` });
+    }
+  });
+
+  // ── Auth endpoints (Google OAuth) ──────────────────────────────────────────────
+  const authLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests." },
+  });
+
+  // Auth middleware — attaches req.user if JWT is valid
+  const authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const token = req.cookies?.["arena_token"];
+    if (!token) { res.status(401).json(apiErr("Not authenticated")); return; }
+    const payload = verifyJWT(token);
+    if (!payload) { res.status(401).json(apiErr("Invalid or expired token")); return; }
+    (req as any).userId = payload.uid;
+    next();
+  };
+
+  // Login redirect — sends user to Google
+  app.get("/auth/google/login", authLimiter, (req, res) => {
+    const frontend = (req.query.redirect as string) || FRONTEND_URL;
+    const url = getGoogleAuthUrl(Buffer.from(frontend).toString("base64url"));
+    res.redirect(url);
+  });
+
+  // Callback — Google redirects here after auth
+  app.get("/auth/google/callback", authLimiter, async (req, res) => {
+    try {
+      const code = req.query.code as string;
+      if (!code) { res.status(400).json(apiErr("Missing authorization code")); return; }
+
+      const googleUser = await exchangeGoogleCode(code);
+      if (!googleUser) { res.status(401).json(apiErr("Google auth failed")); return; }
+
+      // Get DB for user operations — we need the persist function
+      const { default: initSqlJs } = await import("sql.js");
+      const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import("fs");
+      const path = await import("path");
+      const { fileURLToPath } = await import("url");
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
+
+      const SQL = await initSqlJs();
+      mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      const db = existsSync(DB_PATH)
+        ? new SQL.Database(readFileSync(DB_PATH))
+        : new SQL.Database();
+
+      const user = findOrCreateUser(db, googleUser);
+      const token = createJWT(user);
+
+      // Persist DB
+      const data = db.export();
+      writeFileSync(DB_PATH, Buffer.from(data));
+
+      // Determine redirect URL
+      const state = req.query.state as string;
+      const redirectUrl = state
+        ? Buffer.from(state, "base64url").toString()
+        : FRONTEND_URL;
+
+      // Set httpOnly cookie and redirect
+      const isProd = process.env.NODE_ENV === "production";
+      res.cookie("arena_token", token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? "lax" : "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        path: "/",
+      });
+
+      res.redirect(redirectUrl);
+    } catch (e) {
+      console.error("[Auth] Callback error:", e);
+      res.status(500).json(apiErr("Auth callback failed"));
+    }
+  });
+
+  // Get current user
+  app.get("/auth/me", authLimiter, async (req, res) => {
+    const token = req.cookies?.["arena_token"];
+    if (!token) { res.json(apiOk({ user: null })); return; }
+    const payload = verifyJWT(token);
+    if (!payload) { res.json(apiOk({ user: null })); return; }
+
+    // We need a fresh DB read for this — use the getDb from db.ts
+    // But db.ts exports are async and we need sync for the middleware...
+    // Solution: import getDb and await it
+    const { default: initSqlJs } = await import("sql.js");
+    const { readFileSync, existsSync, mkdirSync } = await import("fs");
+    const path = await import("path");
+    const { fileURLToPath } = await import("url");
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
+
+    const SQL = await initSqlJs();
+    mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    const db = existsSync(DB_PATH)
+      ? new SQL.Database(readFileSync(DB_PATH))
+      : new SQL.Database();
+
+    const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+    stmt.bind([payload.uid]);
+    if (stmt.step()) {
+      const user = stmt.getAsObject();
+      stmt.free();
+      res.json(apiOk({ user }));
+    } else {
+      stmt.free();
+      res.json(apiOk({ user: null }));
+    }
+  });
+
+  // Update profile
+  app.put("/auth/profile", authLimiter, authMiddleware, async (req, res) => {
+    try {
+      const userId = (req as any).userId as string;
+      const { display_name } = req.body ?? {};
+      if (!display_name || typeof display_name !== "string") {
+        res.status(400).json(apiErr("Missing display_name")); return;
+      }
+
+      const { default: initSqlJs } = await import("sql.js");
+      const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import("fs");
+      const path = await import("path");
+      const { fileURLToPath } = await import("url");
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
+
+      const SQL = await initSqlJs();
+      mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      const db = existsSync(DB_PATH)
+        ? new SQL.Database(readFileSync(DB_PATH))
+        : new SQL.Database();
+
+      const updated = updateUserProfile(db, userId, { display_name });
+      const data = db.export();
+      writeFileSync(DB_PATH, Buffer.from(data));
+
+      if (!updated) { res.status(404).json(apiErr("User not found")); return; }
+      res.json(apiOk({ user: updated }));
+    } catch (e) {
+      res.status(500).json(apiErr(`Error updating profile: ${String(e)}`));
+    }
+  });
+
+  // Delete account
+  app.delete("/auth/account", authLimiter, authMiddleware, async (req, res) => {
+    try {
+      const userId = (req as any).userId as string;
+
+      const { default: initSqlJs } = await import("sql.js");
+      const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import("fs");
+      const path = await import("path");
+      const { fileURLToPath } = await import("url");
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "../../data/battles.db");
+
+      const SQL = await initSqlJs();
+      mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      const db = existsSync(DB_PATH)
+        ? new SQL.Database(readFileSync(DB_PATH))
+        : new SQL.Database();
+
+      const deleted = deleteUser(db, userId);
+      const data = db.export();
+      writeFileSync(DB_PATH, Buffer.from(data));
+
+      if (!deleted) { res.status(404).json(apiErr("User not found")); return; }
+
+      // Clear cookie
+      res.clearCookie("arena_token", { path: "/" });
+      res.json(apiOk({ deleted: true, message: "Account deleted successfully" }));
+    } catch (e) {
+      res.status(500).json(apiErr(`Error deleting account: ${String(e)}`));
+    }
+  });
+
+  // Logout
+  app.post("/auth/logout", authLimiter, (_req, res) => {
+    res.clearCookie("arena_token", { path: "/" });
+    res.json(apiOk({ logged_out: true }));
+  });
+
   // ── Public REST API — consumed by public-mcp service ─────────────────────
   // No auth required: server-to-server calls from public-mcp (no origin header)
   const apiLimiter = rateLimit({
@@ -169,32 +412,7 @@ async function runHTTP(): Promise<void> {
     message: { error: "Too many requests." },
   });
 
-  // 1. POST /api/battles — Create debate battle
-  app.post("/api/battles", apiLimiter, async (req, res) => {
-    try {
-      const { topic, alpha_stance, beta_stance, my_name, my_device = "AI Desktop", max_rounds = 3 } = req.body ?? {};
-      if (!topic || !alpha_stance || !beta_stance || !my_name) {
-        res.status(400).json(apiErr("Faltan campos requeridos: topic, alpha_stance, beta_stance, my_name"));
-        return;
-      }
-      const id = generateBattleId();
-      await createBattle(id, topic, max_rounds);
-      await addContender(id, "alpha", my_name, alpha_stance, my_device);
-      await addContender(id, "beta", "TBD", beta_stance, "");
-      const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
-      res.json(apiOk({
-        battle_id: id,
-        join_url: `${baseUrl}/live/${id}`,
-        my_side: "alpha",
-        share_message: `¡Te desafío a un debate en AI Battle Arena! Código: #${id} — Tema: "${topic}". Únete en ${baseUrl}`,
-        instructions: `Sala #${id} creada. Comparte el código. Una vez que Beta se una usa 'arena_get_context' para comenzar.`,
-      }));
-    } catch (e) {
-      res.status(500).json(apiErr(`Error creando batalla: ${String(e)}`));
-    }
-  });
-
-  // 2. GET /api/battles — List active battles
+  // 1. GET /api/battles — List active battles
   app.get("/api/battles", apiLimiter, async (_req, res) => {
     try {
       const battles = await listActiveBattles();
@@ -206,8 +424,8 @@ async function runHTTP(): Promise<void> {
           game_mode: b.game_mode,
           status: b.status,
           round: `${b.current_round}/${b.max_rounds}`,
-          alpha: b.alpha?.name ?? "Esperando...",
-          beta: b.beta?.name === "TBD" ? "Buscando oponente..." : (b.beta?.name ?? "Buscando oponente..."),
+          alpha: b.alpha ? `${b.alpha.name} · ${b.alpha.model}` : "Esperando...",
+          beta: b.beta && b.beta.name !== "Esperando..." ? `${b.beta.name} · ${b.beta.model}` : "Buscando oponente...",
           spectators: b.spectator_count,
         })),
       }));
@@ -261,7 +479,7 @@ async function runHTTP(): Promise<void> {
   app.post("/api/battles/:id/beta", apiLimiter, async (req, res) => {
     try {
       const bid = req.params.id.toUpperCase();
-      const { my_name, my_device = "AI Web" } = req.body ?? {};
+      const { my_name, my_model = "Unknown Model" } = req.body ?? {};
       if (!my_name) { res.status(400).json(apiErr("Falta my_name")); return; }
       const battle = await getBattle(bid);
       if (!battle) { res.status(404).json(apiErr(`Sala #${bid} no encontrada.`)); return; }
@@ -270,13 +488,13 @@ async function runHTTP(): Promise<void> {
       if (!betaStance) { res.status(400).json(apiErr(`La sala #${bid} no tiene postura asignada para Beta.`)); return; }
       const activated = await tryActivateBattle(bid);
       if (!activated) { res.status(409).json(apiErr(`La batalla #${bid} ya fue tomada por otro oponente.`)); return; }
-      await addContender(bid, "beta", my_name, betaStance, my_device);
+      await addContender(bid, "beta", my_name, betaStance, my_model);
       await incrementRound(bid);
       const fresh = await getBattle(bid);
       if (!fresh) { res.status(500).json(apiErr("Error interno al cargar la batalla.")); return; }
       res.json(apiOk({
         ...buildBattleContext(fresh, "beta"),
-        welcome: `¡Bienvenido a la batalla #${bid}! Eres Beta. Tu postura: "${betaStance}". ${fresh.alpha?.name ?? "Alpha"} argumenta primero.`,
+        welcome: `¡Bienvenido a la batalla #${bid}! Eres Beta (${my_name} · ${my_model}). Tu postura: "${betaStance}".`,
       }));
     } catch (e) {
       res.status(500).json(apiErr(`Error uniéndose a batalla: ${String(e)}`));
@@ -358,8 +576,10 @@ async function runHTTP(): Promise<void> {
       res.json(apiOk({
         battle_id: battle.id, topic: battle.topic, status: battle.status,
         contenders: {
-          alpha: battle.alpha ? { name: battle.alpha.name, stance: battle.alpha.stance } : null,
-          beta: battle.beta && battle.beta.name !== "TBD" ? { name: battle.beta.name, stance: battle.beta.stance } : null,
+          alpha: battle.alpha ? { name: battle.alpha.name, model: battle.alpha.model, stance: battle.alpha.stance } : null,
+          beta: battle.beta && battle.beta.name !== "Esperando..."
+            ? { name: battle.beta.name, model: battle.beta.model, stance: battle.beta.stance }
+            : null,
         },
         rounds: battle.rounds.map(r => ({
           round: r.round_number, alpha_argument: r.alpha_argument, beta_argument: r.beta_argument,
@@ -372,45 +592,26 @@ async function runHTTP(): Promise<void> {
     }
   });
 
-  // 8. POST /api/chess — Create chess match
-  app.post("/api/chess", apiLimiter, async (req, res) => {
-    try {
-      const { my_name, my_device = "AI Desktop" } = req.body ?? {};
-      if (!my_name) { res.status(400).json(apiErr("Falta my_name")); return; }
-      const id = generateBattleId();
-      await createBattle(id, "Partida de Ajedrez", 999, "chess");
-      await addContender(id, "alpha", my_name, "Blancas ♔", my_device);
-      await addContender(id, "beta", "TBD", "Negras ♚", "");
-      const initialState = createInitialChessState();
-      await saveChessMove(id, initialState, null);
-      const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
-      res.json(apiOk({
-        battle_id: id, my_color: "white", join_url: `${baseUrl}/chess/${id}`,
-        share_message: `¡Te desafío a una partida de ajedrez en AI Battle Arena! Código: #${id}. Únete en ${baseUrl}`,
-        instructions: `Sala #${id} creada. Juegas con las Blancas ♔. Comparte el código.`,
-      }));
-    } catch (e) {
-      res.status(500).json(apiErr(`Error creando partida: ${String(e)}`));
-    }
-  });
-
-  // 9. POST /api/chess/:id/beta — Join chess as Black
+  // 7. POST /api/chess/:id/beta — Join chess
   app.post("/api/chess/:id/beta", apiLimiter, async (req, res) => {
     try {
       const bid = req.params.id.toUpperCase();
-      const { my_name, my_device = "AI Web" } = req.body ?? {};
+      const { my_name, my_model = "Unknown Model" } = req.body ?? {};
       if (!my_name) { res.status(400).json(apiErr("Falta my_name")); return; }
       const battle = await getBattle(bid);
       if (!battle) { res.status(404).json(apiErr(`Sala #${bid} no encontrada.`)); return; }
       if (battle.game_mode !== "chess") { res.status(400).json(apiErr(`La sala #${bid} es de debate, no de ajedrez.`)); return; }
       if (battle.status !== "waiting") { res.status(409).json(apiErr(`La partida #${bid} ya está en curso o finalizada.`)); return; }
-      await addContender(bid, "beta", my_name, "Negras ♚", my_device);
-      await updateBattleStatus(bid, "active");
+      const alphaJoined = battle.alpha?.name !== "Esperando...";
+      const side: "alpha" | "beta" = alphaJoined ? "beta" : "alpha";
+      const color = side === "alpha" ? "Blancas ♔" : "Negras ♚";
+      await addContender(bid, side, my_name, color, my_model);
+      if (alphaJoined) await updateBattleStatus(bid, "active");
       const fresh = await getBattle(bid);
       if (!fresh) { res.status(500).json(apiErr("Error interno al cargar la partida.")); return; }
       res.json(apiOk({
-        ...buildChessContext(fresh, "beta"),
-        welcome: `¡Bienvenido/a a la partida #${bid}! Juegas con las Negras ♚. ${fresh.alpha?.name ?? "Blancas"} comienzan.`,
+        ...buildChessContext(fresh, side),
+        welcome: `¡Bienvenido/a a la partida #${bid}! Juegas con las ${color} (${my_name} · ${my_model}).`,
       }));
     } catch (e) {
       res.status(500).json(apiErr(`Error uniéndose a la partida: ${String(e)}`));

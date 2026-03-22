@@ -1,8 +1,16 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { fetchMe, loginWithGoogle, type User } from '$lib/api';
 	import type { Snippet } from 'svelte';
+
 	let { children }: { children: Snippet } = $props();
+	let user = $state<User | null>(null);
+
+	onMount(async () => {
+		user = await fetchMe();
+	});
 </script>
 
 <!-- NAV -->
@@ -17,9 +25,21 @@
 		<li><a href="/archive" class:active={$page.url.pathname === '/archive'}>Archivo</a></li>
 		<li><a href="/about" class:active={$page.url.pathname === '/about'}>¿Cómo funciona?</a></li>
 	</ul>
-	<a href="https://github.com/mroaromero/AI-Battle-Arena" target="_blank" class="btn-ghost glitch-text top-git">
-		_GITHUB_
-	</a>
+	<div class="nav-right">
+		{#if user}
+			<a href="/settings" class="user-btn" class:active={$page.url.pathname === '/settings'}>
+				<img src={user.avatar_url} alt={user.display_name} class="nav-avatar" />
+				<span class="font-mono">{user.display_name?.split(' ')[0] ?? 'User'}</span>
+			</a>
+		{:else}
+			<button class="btn-ghost font-mono" onclick={loginWithGoogle}>
+				_LOGIN_
+			</button>
+		{/if}
+		<a href="https://github.com/mroaromero/AI-Battle-Arena" target="_blank" class="btn-ghost glitch-text top-git">
+			_GITHUB_
+		</a>
+	</div>
 </nav>
 
 <!-- BOTTOM MOBILE NAV -->
@@ -33,9 +53,15 @@
 	<a href="/about" class:active={$page.url.pathname === '/about'}>
 		<span>[DOCS]</span>
 	</a>
-	<a href="https://github.com/mroaromero/AI-Battle-Arena" target="_blank">
-		<span>[GIT]</span>
-	</a>
+	{#if user}
+		<a href="/settings" class:active={$page.url.pathname === '/settings'}>
+			<span>[USER]</span>
+		</a>
+	{:else}
+		<a href="/login">
+			<span>[LOGIN]</span>
+		</a>
+	{/if}
 </div>
 
 <!-- TICKER HUD -->
@@ -156,12 +182,41 @@ main {
 	padding: 2rem 1.5rem;
 }
 
+.nav-right {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.user-btn {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 700;
+	font-size: 0.7rem;
+	letter-spacing: 1px;
+	color: var(--text-muted);
+	text-decoration: none;
+	transition: all 0.2s;
+	padding: 0.3rem 0.75rem;
+	border: 1px solid transparent;
+}
+.user-btn:hover, .user-btn.active {
+	color: var(--text);
+	border-color: var(--border-bright);
+}
+.nav-avatar {
+	width: 24px;
+	height: 24px;
+	border: 1px solid var(--border-bright);
+}
+
 @media (max-width: 768px) {
-	.nav-links, .top-git { display: none; }
+	.nav-links, .top-git, .nav-right { display: none; }
 	nav { padding: 0 1rem; }
-	
+
 	main {
-		padding-bottom: 5rem; /* Space for bottom nav */
+		padding-bottom: 5rem;
 	}
 
 	.mobile-bottom-nav {

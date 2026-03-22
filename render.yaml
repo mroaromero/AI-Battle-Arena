@@ -18,6 +18,12 @@ services:
         sync: false
       - key: DB_PATH
         value: /opt/render/project/data/battles.db
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
     disk:
       name: battles-data
       mountPath: /opt/render/project/data

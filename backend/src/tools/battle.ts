@@ -1,20 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  createBattle, getBattle, addContender, updateBattleStatus,
+  getBattle, addContender, updateBattleStatus,
   listActiveBattles, saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, getSetting,
 } from "../services/db.js";
 import { judgeRound } from "../services/judge.js";
 import {
-  generateBattleId, buildBattleContext,
+  buildBattleContext,
   determineFinalWinner, ok, err,
 } from "../services/utils.js";
 import { registerChessTools } from "./chess.js";
 
 export function registerAllTools(server: McpServer): void {
-  registerCreateBattle(server);
   registerJoinBattle(server);
   registerGetContext(server);
   registerSubmitArgument(server);
@@ -24,102 +23,43 @@ export function registerAllTools(server: McpServer): void {
   registerChessTools(server);
 }
 
-// ─── 1. arena_create_battle ───────────────────────────────────────────────────
-
-function registerCreateBattle(server: McpServer): void {
-  server.registerTool(
-    "arena_create_battle",
-    {
-      title: "Crear nueva batalla",
-      description: `Crea una sala de debate en AI Battle Arena. El creador es siempre Alpha.
-El oponente (Beta) se une con 'arena_join_battle' usando el código de sala.
-
-Compatible con cualquier cliente de IA que soporte MCP: Claude, ChatGPT, Gemini, Cursor, etc.
-
-Args:
-  - topic: Pregunta o tema del debate (ej: "¿La IA reemplazará a los profesores?")
-  - alpha_stance: Postura de Alpha, quien crea la sala (ej: "A favor de la IA")
-  - beta_stance: Postura de Beta, el oponente (ej: "Defensa del docente humano")
-  - my_name: Tu nombre visible en la batalla
-  - my_device: Tu cliente de IA (ej: "Claude Desktop · Linux", "ChatGPT Web", "Gemini CLI")
-  - max_rounds: Número de rondas (default: 3, máx: 5)
-
-Returns: { battle_id, join_url, my_side, share_message, instructions }`,
-      inputSchema: z.object({
-        topic:        z.string().min(10).max(300).describe("Tema del debate"),
-        alpha_stance: z.string().min(5).max(150).describe("Postura de Alpha (tú)"),
-        beta_stance:  z.string().min(5).max(150).describe("Postura de Beta (oponente)"),
-        my_name:      z.string().min(2).max(50).describe("Tu nombre en la batalla"),
-        my_device:    z.string().max(80).default("AI Desktop").describe("Tu cliente de IA (ej: Claude Desktop, ChatGPT, Gemini)"),
-        max_rounds:   z.number().int().min(1).max(5).default(3).describe("Número de rondas"),
-      }).strict(),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    },
-    async ({ topic, alpha_stance, beta_stance, my_name, my_device, max_rounds }) => {
-      try {
-        const id = generateBattleId();
-        await createBattle(id, topic, max_rounds);
-        await addContender(id, "alpha", my_name, alpha_stance, my_device);
-        // Pre-register Beta with correct stance so it's available when they join
-        await addContender(id, "beta", "TBD", beta_stance, "");
-
-        const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
-        return ok({
-          battle_id: id,
-          join_url: `${baseUrl}/live/${id}`,
-          my_side: "alpha",
-          share_message: `¡Te desafío a un debate en AI Battle Arena! Código: #${id} — Tema: "${topic}". Únete en ${baseUrl}`,
-          instructions: `Sala #${id} creada. Comparte el código. Una vez que Beta se una usa 'arena_get_context' para comenzar.`,
-        });
-      } catch (e) {
-        return err(`Error creando batalla: ${String(e)}`);
-      }
-    }
-  );
-}
-
-// ─── 2. arena_join_battle ─────────────────────────────────────────────────────
+// ─── 1. arena_join_battle ─────────────────────────────────────────────────────
 
 function registerJoinBattle(server: McpServer): void {
   server.registerTool(
     "arena_join_battle",
     {
       title: "Unirse a una batalla",
-      description: `Conecta como Contendiente Beta a una sala existente e inicia el debate.
-Tu postura ya fue asignada por Alpha al crear la sala.
-
-Compatible con cualquier cliente MCP: Claude, ChatGPT, Gemini CLI, Cursor, OpenCode, etc.
+      description: `Conecta como Contendiente a una sala de debate pre-existente creada por el admin.
+Ingresa el battle_id que te fue proporcionado, tu nombre y tu modelo de lenguaje.
 
 Args:
-  - battle_id: Código de 4 caracteres (ej: "A3F9")
-  - my_name: Tu nombre visible en la batalla
-  - my_device: Tu cliente de IA (ej: "Claude Web", "ChatGPT", "Gemini")
+  - battle_id: Código de sala proporcionado por el admin (ej: "A3F9")
+  - my_name: Tu nombre visible (ej: "Claude", "GPT-4", "Gemini Pro")
+  - my_model: Tu modelo de lenguaje (ej: "Opus 4.6", "GPT-4o", "Gemini 2.5 Pro")
 
-Returns: BattleContext con tu postura asignada e instrucciones para la ronda 1.`,
+Returns: BattleContext con tu postura asignada e instrucciones.`,
       inputSchema: z.object({
         battle_id: z.string().length(4).toUpperCase().describe("Código de sala"),
         my_name:   z.string().min(2).max(50).describe("Tu nombre"),
-        my_device: z.string().max(80).default("AI Web").describe("Tu cliente de IA"),
+        my_model:  z.string().max(80).default("Unknown Model").describe("Tu modelo de lenguaje (ej: Opus 4.6, GPT-4o)"),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ battle_id, my_name, my_device }) => {
+    async ({ battle_id, my_name, my_model }) => {
       try {
         const bid = battle_id.toUpperCase();
         const battle = await getBattle(bid);
         if (!battle) return err(`Sala #${bid} no encontrada.`, "Verifica el código e intenta de nuevo.");
         if (battle.status !== "waiting") return err(`La batalla #${bid} ya está en curso o finalizada.`);
 
-        // ✅ FIX: preserve the beta_stance set by Alpha when creating the room
         const betaStance = battle.beta?.stance ?? "";
         if (!betaStance) return err(`La sala #${bid} no tiene una postura asignada para Beta.`);
 
-        // Atomic activation: only succeeds if battle is still 'waiting'
         const activated = await tryActivateBattle(bid);
         if (!activated) return err(`La batalla #${bid} ya fue tomada por otro oponente.`);
 
-        // Update Beta with real name and device, keeping the pre-assigned stance
-        await addContender(bid, "beta", my_name, betaStance, my_device);
+        await addContender(bid, "beta", my_name, betaStance, my_model);
         await incrementRound(bid);
 
         const fresh = await getBattle(bid);
@@ -128,7 +68,7 @@ Returns: BattleContext con tu postura asignada e instrucciones para la ronda 1.`
 
         return ok({
           ...context,
-          welcome: `¡Bienvenido a la batalla #${bid}! Eres Beta. Tu postura: "${betaStance}". ${fresh.alpha?.name ?? "Alpha"} argumenta primero — usa 'arena_get_context' para monitorear.`,
+          welcome: `¡Bienvenido a la batalla #${bid}! Eres Beta (${my_name} · ${my_model}). Tu postura: "${betaStance}". ${fresh.alpha?.name ?? "Alpha"} argumenta primero.`,
         });
       } catch (e) {
         return err(`Error uniéndose a batalla: ${String(e)}`);
@@ -347,9 +287,9 @@ Returns: { battle_id, topic, status, contenders, rounds, final_winner, spectator
           topic: battle.topic,
           status: battle.status,
           contenders: {
-            alpha: battle.alpha ? { name: battle.alpha.name, stance: battle.alpha.stance } : null,
-            beta: battle.beta && battle.beta.name !== "TBD"
-              ? { name: battle.beta.name, stance: battle.beta.stance }
+            alpha: battle.alpha ? { name: battle.alpha.name, model: battle.alpha.model, stance: battle.alpha.stance } : null,
+            beta: battle.beta && battle.beta.name !== "Esperando..."
+              ? { name: battle.beta.name, model: battle.beta.model, stance: battle.beta.stance }
               : null,
           },
           rounds: battle.rounds.map(r => ({
