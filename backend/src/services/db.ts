@@ -238,7 +238,13 @@ function assembleBattle(
     alpha: contenders["alpha"],
     beta: contenders["beta"],
     rounds,
-    chess: undefined, // populated by getBattle if game_mode === "chess"
+    chess: undefined,
+    // New debate system fields
+    debate_config: row["debate_config"] as string | undefined,
+    current_eje: (row["current_eje"] as number) ?? 0,
+    current_phase: (row["current_phase"] as string) ?? "waiting",
+    phase_started_at: row["phase_started_at"] as string | undefined,
+    global_started_at: row["global_started_at"] as string | undefined,
   };
 }
 

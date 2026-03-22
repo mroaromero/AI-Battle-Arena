@@ -80,6 +80,12 @@ export interface Battle {
   started_at?: string;
   finished_at?: string;
   final_winner?: ContenderSide | "draw";
+  // New debate system fields
+  debate_config?: string | Record<string, unknown>;
+  current_eje?: number;
+  current_phase?: string;
+  phase_started_at?: string;
+  global_started_at?: string;
 }
 
 // ─── Tool response helpers ────────────────────────────────────────────────────
