@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '../lib/i18n';
+	import { t } from 'svelte-i18n';
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { api, subscribeToBattle } from '$lib/api';

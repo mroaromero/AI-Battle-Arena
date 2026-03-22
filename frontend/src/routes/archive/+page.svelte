@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '../lib/i18n';
+	import { t } from 'svelte-i18n';
 	import { onMount } from 'svelte';
 	import { fetchArchive } from '$lib/api';
 
@@ -110,13 +112,13 @@
 	<section class="archive-header stagger-enter" style="animation-delay: 0.1s;">
 		<div class="hero-eyebrow font-mono">
 			<span class="live-blink"></span>
-			// BATTLE ARCHIVE //
+			{$t('archive.hero_eyebrow')}
 		</div>
 		<h1 class="hero-title glitch-text">
-			<span class="text-alpha">HISTORIAL</span> DE BATALLAS
+			<span class="text-alpha">{$t('archive.hero_title').split(' ')[0]}</span> {$t('archive.hero_title').split(' ').slice(1).join(' ')}
 		</h1>
 		<p class="hero-sub font-mono">
-			COMPLETED · REPLAY · SPECTATE
+			{$t('archive.hero_sub')}
 		</p>
 	</section>
 
@@ -124,19 +126,19 @@
 	<div class="filter-bar stagger-enter" style="animation-delay: 0.15s;">
 		<div class="mode-tabs">
 			<button class="mode-tab font-mono" class:active={gameMode === 'all'} onclick={() => handleMode('all')}>
-				TODAS
+				{$t('archive.all')}
 			</button>
 			<button class="mode-tab font-mono" class:active={gameMode === 'debate'} onclick={() => handleMode('debate')}>
-				DEBATE
+				{$t('archive.debate')}
 			</button>
 			<button class="mode-tab font-mono" class:active={gameMode === 'chess'} onclick={() => handleMode('chess')}>
-				AJEDREZ
+				{$t('archive.chess')}
 			</button>
 		</div>
 		<div class="search-wrap">
 			<input
 				type="text"
-				placeholder="BUSCAR POR TEMA..."
+				placeholder={$t('archive.search_placeholder')}
 				class="search-input font-mono"
 				oninput={handleSearch}
 				value={search}
@@ -147,8 +149,8 @@
 	<!-- TOTAL -->
 	<div class="archive-meta font-mono stagger-enter" style="animation-delay: 0.2s;">
 		{#if !loading}
-			<span class="text-dim">{total} BATALLAS COMPLETADAS</span>
-			<span class="text-dim">PÁG. {page}/{totalPages}</span>
+			<span class="text-dim">{total} {$t('archive.total_battles')}</span>
+			<span class="text-dim">{$t('archive.page_info')} {page}/{totalPages}</span>
 		{/if}
 	</div>
 
@@ -156,18 +158,18 @@
 	{#if loading && battles.length === 0}
 		<div class="loading-state stagger-enter">
 			<div class="loading-bar"></div>
-			<p class="font-mono text-dim">CARGANDO ARCHIVO...</p>
+			<p class="font-mono text-dim">{$t('archive.loading')}</p>
 		</div>
 	{:else if error}
 		<div class="error-state">
 			<p class="font-mono text-alpha">{error}</p>
-			<button class="btn-ghost font-mono" onclick={loadArchive}>REINTENTAR</button>
+			<button class="btn-ghost font-mono" onclick={loadArchive}>{$t('archive.retry')}</button>
 		</div>
 	{:else if battles.length === 0}
 		<div class="empty-state stagger-enter">
 			<div class="empty-icon">∅</div>
-			<p class="font-mono text-dim">SIN BATALLAS COMPLETADAS</p>
-			<p class="font-mono text-dim" style="font-size: 0.7rem;">Las batallas archivadas aparecerán aquí.</p>
+			<p class="font-mono text-dim">{$t('archive.no_battles')}</p>
+			<p class="font-mono text-dim" style="font-size: 0.7rem;">{$t('archive.no_battles_sub')}</p>
 		</div>
 	{:else}
 		<div class="battle-grid">
@@ -199,9 +201,9 @@
 		<!-- PAGINATION -->
 		{#if totalPages > 1}
 			<div class="pagination stagger-enter" style="animation-delay: 0.3s;">
-				<button class="btn-ghost font-mono" onclick={prevPage} disabled={page <= 1}>◀ ANTERIOR</button>
-				<span class="font-mono text-dim">PÁG. {page} / {totalPages}</span>
-				<button class="btn-ghost font-mono" onclick={nextPage} disabled={page >= totalPages}>SIGUIENTE ▶</button>
+				<button class="btn-ghost font-mono" onclick={prevPage} disabled={page <= 1}>{$t('archive.prev')}</button>
+				<span class="font-mono text-dim">{$t('archive.page_info')} {page} / {totalPages}</span>
+				<button class="btn-ghost font-mono" onclick={nextPage} disabled={page >= totalPages}>{$t('archive.next')}</button>
 			</div>
 		{/if}
 	{/if}

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import '../lib/i18n';
 	import { onMount } from 'svelte';
+	import { t } from 'svelte-i18n';
 	import { fetchLeaderboard, type LeaderboardEntry } from '$lib/api';
 
 	let entries = $state<LeaderboardEntry[]>([]);
@@ -46,13 +48,13 @@
 	<section class="lb-header stagger-enter" style="animation-delay: 0.1s;">
 		<div class="hero-eyebrow font-mono">
 			<span class="live-blink"></span>
-			// GLOBAL RANKINGS //
+			{$t('leaderboard.hero_eyebrow')}
 		</div>
 		<h1 class="hero-title glitch-text">
-			<span class="text-gold">LEADERBOARD</span>
+			<span class="text-gold">{$t('leaderboard.hero_title')}</span>
 		</h1>
 		<p class="hero-sub font-mono">
-			WINS · LOSSES · DRAWS · WIN RATE
+			{$t('leaderboard.hero_sub')}
 		</p>
 	</section>
 
@@ -60,13 +62,13 @@
 	<div class="filter-bar stagger-enter" style="animation-delay: 0.15s;">
 		<div class="mode-tabs">
 			<button class="mode-tab font-mono" class:active={gameMode === 'all'} onclick={() => handleMode('all')}>
-				GLOBAL
+				{$t('leaderboard.global')}
 			</button>
 			<button class="mode-tab font-mono" class:active={gameMode === 'debate'} onclick={() => handleMode('debate')}>
-				DEBATE
+				{$t('archive.debate')}
 			</button>
 			<button class="mode-tab font-mono" class:active={gameMode === 'chess'} onclick={() => handleMode('chess')}>
-				AJEDREZ
+				{$t('archive.chess')}
 			</button>
 		</div>
 	</div>
@@ -75,31 +77,31 @@
 	{#if loading && entries.length === 0}
 		<div class="loading-state">
 			<div class="loading-bar"></div>
-			<p class="font-mono text-dim">CARGANDO RANKINGS...</p>
+			<p class="font-mono text-dim">{$t('leaderboard.loading')}</p>
 		</div>
 	{:else if error}
 		<div class="error-state">
 			<p class="font-mono text-alpha">{error}</p>
-			<button class="btn-ghost font-mono" onclick={load}>REINTENTAR</button>
+			<button class="btn-ghost font-mono" onclick={load}>{$t('common.retry')}</button>
 		</div>
 	{:else if entries.length === 0}
 		<div class="empty-state">
 			<div class="empty-icon">∅</div>
-			<p class="font-mono text-dim">SIN DATOS DE RANKING</p>
-			<p class="font-mono text-dim" style="font-size: 0.7rem;">Los rankings aparecerán después de batallas completadas.</p>
+			<p class="font-mono text-dim">{$t('leaderboard.no_data')}</p>
+			<p class="font-mono text-dim" style="font-size: 0.7rem;">{$t('leaderboard.no_data_sub')}</p>
 		</div>
 	{:else}
 		<div class="table-wrap stagger-enter" style="animation-delay: 0.2s;">
 			<!-- Table Header -->
 			<div class="table-header font-mono">
-				<div class="col-rank">RANK</div>
-				<div class="col-name">CONTENDIENTE</div>
-				<div class="col-model">MODELO</div>
-				<div class="col-stats">W</div>
-				<div class="col-stats">L</div>
-				<div class="col-stats">D</div>
-				<div class="col-stats">TOTAL</div>
-				<div class="col-rate">WIN %</div>
+				<div class="col-rank">{$t('leaderboard.rank')}</div>
+				<div class="col-name">{$t('leaderboard.contender')}</div>
+				<div class="col-model">{$t('leaderboard.model')}</div>
+				<div class="col-stats">{$t('leaderboard.wins')}</div>
+				<div class="col-stats">{$t('leaderboard.losses')}</div>
+				<div class="col-stats">{$t('leaderboard.draws')}</div>
+				<div class="col-stats">{$t('leaderboard.total')}</div>
+				<div class="col-rate">{$t('leaderboard.win_rate')}</div>
 			</div>
 
 			<!-- Table Rows -->

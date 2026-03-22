@@ -1,4 +1,6 @@
 <script lang="ts">
+	import '../lib/i18n';
+	import { t } from 'svelte-i18n';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fetchMe, updateProfile, deleteAccount, logout, type User } from '$lib/api';
@@ -30,7 +32,7 @@
 		message = '';
 		try {
 			user = await updateProfile(editName.trim());
-			message = 'NOMBRE ACTUALIZADO';
+			message = $t('settings.saved');
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -61,16 +63,16 @@
 	{#if loading}
 		<div class="loading-state">
 			<div class="loading-bar"></div>
-			<p class="font-mono text-dim">CARGANDO PERFIL...</p>
+			<p class="font-mono text-dim">{$t('common.loading')}</p>
 		</div>
 	{:else if user}
 		<section class="settings-header stagger-enter" style="animation-delay: 0.1s;">
 			<div class="hero-eyebrow font-mono">
 				<span class="live-blink"></span>
-				// USER SETTINGS //
+				{$t('settings.user_settings')}
 			</div>
 			<h1 class="hero-title">
-				<span class="text-beta">PERFIL</span> DE USUARIO
+				<span class="text-beta">{$t('settings.title').split(' ')[0]}</span> {$t('settings.title').split(' ').slice(1).join(' ')}
 			</h1>
 		</section>
 
@@ -80,14 +82,14 @@
 				<img src={user.avatar_url} alt={user.display_name} class="avatar" />
 				<div class="profile-info">
 					<span class="font-mono email">{user.email}</span>
-					<span class="font-mono joined">CUENTA CREADA: {new Date(user.created_at).toLocaleDateString('es-AR')}</span>
+					<span class="font-mono joined">{$t('settings.created')}: {new Date(user.created_at).toLocaleDateString()}</span>
 				</div>
 			</div>
 		</div>
 
 		<!-- Edit Name -->
 		<div class="settings-card stagger-enter" style="animation-delay: 0.2s;">
-			<h3 class="card-title font-mono">NOMBRE DE DISPLAY</h3>
+			<h3 class="card-title font-mono">{$t('settings.display_name')}</h3>
 			<div class="form-row">
 				<input
 					type="text"
@@ -101,7 +103,7 @@
 					onclick={handleSave}
 					disabled={saving || editName.trim() === user.display_name}
 				>
-					{saving ? 'GUARDANDO...' : 'GUARDAR'}
+					{saving ? $t('settings.saving') : $t('settings.save')}
 				</button>
 			</div>
 			{#if message}
@@ -111,31 +113,31 @@
 
 		<!-- Account Actions -->
 		<div class="settings-card stagger-enter" style="animation-delay: 0.25s;">
-			<h3 class="card-title font-mono">SESIÓN</h3>
+			<h3 class="card-title font-mono">{$t('settings.session')}</h3>
 			<button class="btn-ghost font-mono" onclick={handleLogout}>
-				CERRAR SESIÓN
+				{$t('settings.logout')}
 			</button>
 		</div>
 
 		<!-- Danger Zone -->
 		<div class="settings-card danger-zone stagger-enter" style="animation-delay: 0.3s;">
-			<h3 class="card-title font-mono text-alpha">ZONA DE PELIGRO</h3>
+			<h3 class="card-title font-mono text-alpha">{$t('settings.danger_zone')}</h3>
 			<p class="font-mono text-dim danger-desc">
-				Esta acción es irreversible. Se eliminarán todos tus datos.
+				{$t('settings.danger_desc')}
 			</p>
 			{#if !showDeleteConfirm}
 				<button class="btn-danger font-mono" onclick={() => showDeleteConfirm = true}>
-					ELIMINAR CUENTA
+					{$t('settings.delete_account')}
 				</button>
 			{:else}
 				<div class="delete-confirm">
-					<p class="font-mono text-alpha">¿ESTÁS SEGURO?</p>
+					<p class="font-mono text-alpha">{$t('settings.delete_confirm')}</p>
 					<div class="confirm-actions">
 						<button class="btn-danger font-mono" onclick={handleDelete} disabled={deleting}>
-							{deleting ? 'ELIMINANDO...' : 'SÍ, ELIMINAR'}
+							{deleting ? $t('settings.delete_deleting') : $t('settings.delete_yes')}
 						</button>
 						<button class="btn-ghost font-mono" onclick={() => showDeleteConfirm = false}>
-							CANCELAR
+							{$t('settings.cancel')}
 						</button>
 					</div>
 				</div>

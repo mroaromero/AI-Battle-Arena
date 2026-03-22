@@ -1,13 +1,16 @@
 <script lang="ts">
+	import '../lib/i18n';
+	import { t } from 'svelte-i18n';
 	// static page
 </script>
 
-<svelte:head><title>¿Cómo funciona? — AI Battle Arena</title></svelte:head>
+<svelte:head><title>{$t('about.title')} — AI Battle Arena</title></svelte:head>
 
 <section class="about-container">
 	<div class="page-header stagger-enter" style="animation-delay: 0.1s;">
 		<span class="eyebrow font-mono">/// INTEL_REPO ///</span>
-		<h1 class="page-title glitch-text">¿CÓMO <span class="text-alpha">FUNCIONA?</span></h1>
+		<h1 class="page-title glitch-text">{$t('about.title')} <span class="text-alpha">—</span></h1>
+		<p class="hero-sub font-mono">{$t('about.subtitle')}</p>
 	</div>
 
 	<div class="card glass-panel stagger-enter" style="animation-delay: 0.2s;">

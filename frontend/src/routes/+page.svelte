@@ -1,5 +1,7 @@
 <script lang="ts">
+	import '../lib/i18n';
 	import { onMount, onDestroy } from 'svelte';
+	import { t } from 'svelte-i18n';
 	import { api } from '$lib/api';
 	import type { ActiveBattle } from '$lib/types';
 
@@ -74,7 +76,7 @@
 	<section class="battles-section stagger-enter" style="animation-delay: 0.3s;">
 		<div class="section-header">
 			<h2 class="section-title">
-				<span class="text-beta">>></span> SALAS ACTIVAS
+				<span class="text-beta">>></span> {$t('lobby.hero_eyebrow').replace('// ', '').replace(' //', '')}
 			</h2>
 			<span class="refresh-hint font-mono">AUTO_REFRESH_5S</span>
 		</div>
@@ -82,7 +84,7 @@
 		{#if loading}
 			<div class="state-box">
 				<div class="spinner"></div>
-				<span>ESTABLECIENDO CONEXIÓN...</span>
+				<span>{$t('lobby.loading')}</span>
 			</div>
 		{:else if error}
 			<div class="state-box error">
@@ -91,8 +93,8 @@
 			</div>
 		{:else if battles.length === 0}
 			<div class="state-box empty">
-				<p class="empty-title text-muted">0 SALAS DETECTADAS</p>
-				<p class="empty-sub">INSTANCIA UNA BATALLA DESDE TU CLIENTE MCP PARA COMENZAR.</p>
+				<p class="empty-title text-muted">{$t('lobby.no_battles')}</p>
+				<p class="empty-sub">{$t('lobby.no_battles_sub')}</p>
 			</div>
 		{:else}
 			<div class="battles-list">
