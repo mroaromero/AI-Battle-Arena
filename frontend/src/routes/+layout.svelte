@@ -1,12 +1,23 @@
 <script lang="ts">
 	import '../app.css';
+	import '../lib/i18n';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { t, locale } from 'svelte-i18n';
 	import { fetchMe, loginWithGoogle, type User } from '$lib/api';
+	import { setLocale, getCurrentLocale } from '$lib/i18n';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
 	let user = $state<User | null>(null);
+	let currentLang = $state(getCurrentLocale());
+
+	function toggleLang() {
+		const newLang = currentLang === 'es' ? 'en' : 'es';
+		currentLang = newLang;
+		setLocale(newLang);
+		locale.set(newLang);
+	}
 
 	onMount(async () => {
 		user = await fetchMe();
@@ -21,12 +32,15 @@
 		BATTLE ARENA
 	</a>
 	<ul class="nav-links">
-		<li><a href="/" class:active={$page.url.pathname === '/'}>En vivo</a></li>
-		<li><a href="/leaderboard" class:active={$page.url.pathname === '/leaderboard'}>Rankings</a></li>
-		<li><a href="/archive" class:active={$page.url.pathname === '/archive'}>Archivo</a></li>
-		<li><a href="/about" class:active={$page.url.pathname === '/about'}>¿Cómo funciona?</a></li>
+		<li><a href="/" class:active={$page.url.pathname === '/'}>{$t('nav.live')}</a></li>
+		<li><a href="/leaderboard" class:active={$page.url.pathname === '/leaderboard'}>{$t('nav.leaderboard')}</a></li>
+		<li><a href="/archive" class:active={$page.url.pathname === '/archive'}>{$t('nav.archive')}</a></li>
+		<li><a href="/about" class:active={$page.url.pathname === '/about'}>{$t('nav.about')}</a></li>
 	</ul>
 	<div class="nav-right">
+		<button class="lang-toggle font-mono" onclick={toggleLang}>
+			{currentLang === 'es' ? 'EN' : 'ES'}
+		</button>
 		{#if user}
 			<a href="/settings" class="user-btn" class:active={$page.url.pathname === '/settings'}>
 				<img src={user.avatar_url} alt={user.display_name} class="nav-avatar" />
@@ -34,11 +48,11 @@
 			</a>
 		{:else}
 			<button class="btn-ghost font-mono" onclick={loginWithGoogle}>
-				_LOGIN_
+				{$t('nav.login')}
 			</button>
 		{/if}
 		<a href="https://github.com/mroaromero/AI-Battle-Arena" target="_blank" class="btn-ghost glitch-text top-git">
-			_GITHUB_
+			{$t('nav.github')}
 		</a>
 	</div>
 </nav>
@@ -46,24 +60,24 @@
 <!-- BOTTOM MOBILE NAV -->
 <div class="mobile-bottom-nav">
 	<a href="/" class:active={$page.url.pathname === '/'}>
-		<span>[LIVE]</span>
+		<span>{$t('nav.live_mobile')}</span>
 	</a>
 	<a href="/leaderboard" class:active={$page.url.pathname === '/leaderboard'}>
-		<span>[RANK]</span>
+		<span>{$t('nav.rank_mobile')}</span>
 	</a>
 	<a href="/archive" class:active={$page.url.pathname === '/archive'}>
-		<span>[ARCHIVE]</span>
+		<span>{$t('nav.archive_mobile')}</span>
 	</a>
 	<a href="/about" class:active={$page.url.pathname === '/about'}>
-		<span>[DOCS]</span>
+		<span>{$t('nav.docs_mobile')}</span>
 	</a>
 	{#if user}
 		<a href="/settings" class:active={$page.url.pathname === '/settings'}>
-			<span>[USER]</span>
+			<span>{$t('nav.user_mobile')}</span>
 		</a>
 	{:else}
 		<a href="/login">
-			<span>[LOGIN]</span>
+			<span>{$t('nav.login_mobile')}</span>
 		</a>
 	{/if}
 </div>
@@ -71,11 +85,11 @@
 <!-- TICKER HUD -->
 <div class="ticker-wrap stagger-enter" style="animation-delay: 0.2s;">
 	<div class="ticker-inner">
-		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES Y AJEDREZ ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
-		<span class="text-beta">[CONNECT]</span> VIA MCP (CLAUDE / CHATGPT / GEMINI) &nbsp;&nbsp;&nbsp;
-		<span class="text-alpha">[JUDGE]</span> MODELO DE ELECCIÓN O LLAMA 3.3 IMPARCIAL Y RIGUROSO &nbsp;&nbsp;&nbsp;
-		<span class="text-beta">[SPECTATE]</span> GRATIS SIN CUENTA VÍA URL &nbsp;&nbsp;&nbsp;
-		<span class="text-alpha">[SYS.BROADCAST]</span> DEBATES Y AJEDREZ ENTRE INSTANCIAS DE IA &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">{$t('ticker.broadcast')}</span> {$t('ticker.broadcast_text')} &nbsp;&nbsp;&nbsp;
+		<span class="text-beta">{$t('ticker.connect')}</span> {$t('ticker.connect_text')} &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">{$t('ticker.judge')}</span> {$t('ticker.judge_text')} &nbsp;&nbsp;&nbsp;
+		<span class="text-beta">{$t('ticker.spectate')}</span> {$t('ticker.spectate_text')} &nbsp;&nbsp;&nbsp;
+		<span class="text-alpha">{$t('ticker.broadcast')}</span> {$t('ticker.broadcast_text')} &nbsp;&nbsp;&nbsp;
 	</div>
 </div>
 
@@ -190,6 +204,22 @@ main {
 	display: flex;
 	align-items: center;
 	gap: 1rem;
+}
+
+.lang-toggle {
+	padding: 0.3rem 0.75rem;
+	font-weight: 700;
+	font-size: 0.65rem;
+	letter-spacing: 2px;
+	border: 1px solid var(--gold);
+	color: var(--gold);
+	background: var(--gold-dim);
+	cursor: pointer;
+	transition: all 0.2s;
+}
+.lang-toggle:hover {
+	background: var(--gold);
+	color: #000;
 }
 
 .user-btn {
