@@ -42,6 +42,22 @@ export type AdminStatus = {
   battles: { total: number; waiting: number; active: number; completed: number };
 };
 
+export type BattleRoom = {
+  id: string;
+  topic: string;
+  game_mode: 'debate' | 'chess';
+  status: string;
+  max_rounds: number;
+  alpha_name: string | null;
+  beta_name: string | null;
+  alpha_model: string | null;
+  beta_model: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  final_winner: string | null;
+};
+
 // ─── API client ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -55,5 +71,26 @@ export const api = {
     request<{ success: true }>('/admin/config', secret, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  getRooms: (secret: string) =>
+    request<{ rooms: BattleRoom[]; total: number }>('/admin/rooms', secret),
+
+  createRooms: (secret: string, body: {
+    count: number;
+    topic: string;
+    alpha_stance: string;
+    beta_stance: string;
+    game_mode: 'debate' | 'chess';
+    max_rounds: number;
+  }) =>
+    request<{ created: number; rooms: { battle_id: string; join_url: string }[] }>('/admin/rooms', secret, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteRoom: (secret: string, battleId: string) =>
+    request<{ deleted: boolean }>('/admin/rooms/' + battleId, secret, {
+      method: 'DELETE',
     }),
 };

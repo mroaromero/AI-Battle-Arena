@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   IconRefresh, IconCheck, IconX, IconKey, IconSword,
   IconSettings, IconLoader2, IconEye, IconEyeOff,
+  IconPlus, IconTrash, IconCopy, IconUsers,
 } from '@tabler/icons-react';
 import { getSecret, clearSession } from '../lib/auth';
-import { api, type AdminStatus } from '../lib/api';
+import { api, type AdminStatus, type BattleRoom } from '../lib/api';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,29 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
 
+  // Room management state
+  const [rooms, setRooms] = useState<BattleRoom[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    count: 1,
+    topic: '',
+    alpha_stance: '',
+    beta_stance: '',
+    game_mode: 'debate' as 'debate' | 'chess',
+    max_rounds: 3,
+  });
+  const [creatingRooms, setCreatingRooms] = useState(false);
+  const [deletingRoom, setDeletingRoom] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const loadRooms = useCallback(async () => {
+    if (!secret) return;
+    setRoomsLoading(true);
+    const res = await api.getRooms(secret);
+    if (res.data) setRooms(res.data.rooms);
+    setRoomsLoading(false);
+  }, [secret]);
+
   const loadData = useCallback(async () => {
     if (!secret) { navigate('/login', { replace: true }); return; }
     setLoading(true);
@@ -163,8 +187,9 @@ export function DashboardPage() {
     if (statusRes.data)                     setStatus(statusRes.data);
     if (configRes.error === 'ERR_AUTH')     { clearSession(); navigate('/login', { replace: true }); return; }
     if (configRes.data)                     setConfig(configRes.data);
+    loadRooms();
     setLoading(false);
-  }, [secret, navigate]);
+  }, [secret, navigate, loadRooms]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -213,6 +238,45 @@ export function DashboardPage() {
 
   const pendingCount = Object.values(edits).filter(v => v !== '').length;
   const hasEdits     = pendingCount > 0;
+
+  // Room management handlers
+  const handleCreateRooms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!secret || !roomForm.topic.trim() || !roomForm.alpha_stance.trim() || !roomForm.beta_stance.trim()) return;
+    setCreatingRooms(true);
+    const result = await api.createRooms(secret, roomForm);
+    setCreatingRooms(false);
+    if (result.data) {
+      showToast('ok', `${result.data.created} SALA${result.data.created > 1 ? 'S' : ''} CREADA${result.data.created > 1 ? 'S' : ''}`);
+      setRoomForm({ count: 1, topic: '', alpha_stance: '', beta_stance: '', game_mode: 'debate', max_rounds: 3 });
+      loadRooms();
+      loadData(); // refresh stats
+    } else if (result.error === 'ERR_AUTH') {
+      clearSession(); navigate('/login', { replace: true });
+    } else {
+      showToast('err', `ERROR: ${result.error}`);
+    }
+  };
+
+  const handleDeleteRoom = async (id: string) => {
+    if (!secret) return;
+    setDeletingRoom(id);
+    const result = await api.deleteRoom(secret, id);
+    setDeletingRoom(null);
+    if (result.data) {
+      showToast('ok', 'SALA ELIMINADA');
+      loadRooms();
+      loadData();
+    } else {
+      showToast('err', `ERROR: ${result.error}`);
+    }
+  };
+
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -390,6 +454,134 @@ export function DashboardPage() {
           )}
         </div>
       </form>
+
+      {/* ── ROOM MANAGEMENT ───────────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="flex items-center gap-3 mb-6">
+          <IconUsers size={14} className="text-beta shrink-0" />
+          <span className="font-mono text-[0.6rem] text-beta uppercase tracking-widest">
+            GESTIÓN DE SALAS
+          </span>
+          <div className="flex-1 h-px bg-beta/20" />
+        </div>
+
+        {/* Create rooms form */}
+        <form onSubmit={handleCreateRooms} className="border border-borderBright bg-surface p-5 mb-6">
+          <div className="font-mono text-[0.55rem] text-textDim uppercase tracking-widest mb-4">
+            CREAR SALAS
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">TEMA DEL DEBATE</label>
+              <input type="text" value={roomForm.topic}
+                onChange={e => setRoomForm(f => ({ ...f, topic: e.target.value }))}
+                placeholder="¿La IA reemplazará a los profesores?"
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-beta transition-colors" />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">CANTIDAD</label>
+                <input type="number" value={roomForm.count} min={1} max={50}
+                  onChange={e => setRoomForm(f => ({ ...f, count: parseInt(e.target.value) || 1 }))}
+                  className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-beta transition-colors" />
+              </div>
+              <div className="flex-1">
+                <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">MODO</label>
+                <select value={roomForm.game_mode}
+                  onChange={e => setRoomForm(f => ({ ...f, game_mode: e.target.value as 'debate' | 'chess' }))}
+                  className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-beta transition-colors">
+                  <option value="debate">DEBATE</option>
+                  <option value="chess">AJEDREZ</option>
+                </select>
+              </div>
+              {roomForm.game_mode === 'debate' && (
+                <div className="flex-1">
+                  <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">RONDAS</label>
+                  <input type="number" value={roomForm.max_rounds} min={1} max={10}
+                    onChange={e => setRoomForm(f => ({ ...f, max_rounds: parseInt(e.target.value) || 3 }))}
+                    className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-beta transition-colors" />
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="font-mono text-[0.5rem] text-alpha uppercase tracking-wider block mb-1">POSTURA ALPHA</label>
+              <input type="text" value={roomForm.alpha_stance}
+                onChange={e => setRoomForm(f => ({ ...f, alpha_stance: e.target.value }))}
+                placeholder="A favor de la IA en educación"
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-alpha transition-colors" />
+            </div>
+            <div>
+              <label className="font-mono text-[0.5rem] text-beta uppercase tracking-wider block mb-1">POSTURA BETA</label>
+              <input type="text" value={roomForm.beta_stance}
+                onChange={e => setRoomForm(f => ({ ...f, beta_stance: e.target.value }))}
+                placeholder="Defensa del docente humano"
+                className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-beta transition-colors" />
+            </div>
+          </div>
+          <button type="submit" disabled={creatingRooms || !roomForm.topic.trim() || !roomForm.alpha_stance.trim() || !roomForm.beta_stance.trim()}
+            className="w-full bg-beta text-bg font-mono font-extrabold text-[0.65rem] tracking-[0.25em] uppercase py-3 transition-all hover:bg-white hover:text-black disabled:opacity-30 disabled:pointer-events-none">
+            {creatingRooms ? (
+              <span className="flex items-center justify-center gap-2"><IconLoader2 size={13} className="animate-spin" /> CREANDO...</span>
+            ) : (
+              <span className="flex items-center justify-center gap-2"><IconPlus size={13} /> CREAR {roomForm.count > 1 ? `${roomForm.count} SALAS` : 'SALA'}</span>
+            )}
+          </button>
+        </form>
+
+        {/* Rooms list */}
+        {roomsLoading ? (
+          <div className="flex items-center gap-2 justify-center py-8">
+            <IconLoader2 size={16} className="text-beta animate-spin" />
+            <span className="font-mono text-xs text-textDim uppercase">Cargando salas...</span>
+          </div>
+        ) : rooms.length === 0 ? (
+          <div className="text-center py-8 border border-borderBright bg-surface">
+            <div className="font-display text-2xl text-textDim mb-2">∅</div>
+            <p className="font-mono text-xs text-textDim uppercase tracking-wider">Sin salas activas</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rooms.map(room => (
+              <div key={room.id} className="border border-borderBright bg-surface p-4 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`tag font-mono text-[0.55rem] px-2 py-0.5 ${room.game_mode === 'chess' ? 'bg-beta/10 text-beta border border-beta/30' : 'bg-alpha/10 text-alpha border border-alpha/30'}`}>
+                      {room.game_mode === 'chess' ? 'CHESS' : 'DEBATE'}
+                    </span>
+                    <span className={`tag font-mono text-[0.55rem] px-2 py-0.5 ${
+                      room.status === 'waiting' ? 'bg-gold/10 text-gold border border-gold/30' :
+                      room.status === 'active' ? 'bg-green/10 text-green border border-green/30' :
+                      'bg-surface2 text-textDim border border-borderBright'
+                    }`}>
+                      {room.status.toUpperCase()}
+                    </span>
+                    <span className="font-mono text-[0.6rem] font-bold text-text tracking-wider">#{room.id}</span>
+                  </div>
+                  <div className="font-mono text-xs text-text truncate">{room.topic}</div>
+                  <div className="font-mono text-[0.55rem] text-textDim mt-0.5">
+                    {room.alpha_name ? `${room.alpha_name} vs ${room.beta_name ?? '...'}` : 'Esperando contendientes...'}
+                    {room.alpha_model && ` · ${room.alpha_model}`}
+                    {room.max_rounds < 999 && ` · ${room.max_rounds} rondas`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => handleCopyId(room.id)}
+                    className="flex items-center gap-1 font-mono text-[0.55rem] px-2 py-1.5 border border-borderBright text-textDim hover:text-text hover:border-text transition-colors uppercase">
+                    <IconCopy size={11} />
+                    {copiedId === room.id ? 'COPIADO' : 'COPIAR ID'}
+                  </button>
+                  <button onClick={() => handleDeleteRoom(room.id)} disabled={deletingRoom === room.id}
+                    className="flex items-center gap-1 font-mono text-[0.55rem] px-2 py-1.5 border border-alpha/30 text-alpha/50 hover:text-alpha hover:border-alpha transition-colors uppercase disabled:opacity-40">
+                    {deletingRoom === room.id ? <IconLoader2 size={11} className="animate-spin" /> : <IconTrash size={11} />}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
