@@ -4,7 +4,7 @@ import {
   createBattle, getBattle, addContender, updateBattleStatus,
   listActiveBattles, saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
-  tryActivateBattle,
+  tryActivateBattle, getSetting,
 } from "../services/db.js";
 import { judgeRound } from "../services/judge.js";
 import {
@@ -216,6 +216,14 @@ Returns:
         }
         if (my_side === "beta" && roundData?.beta_argument) {
           return err("Ya enviaste tu argumento en esta ronda.", "Espera el veredicto del árbitro.");
+        }
+
+        // Enforce MAX_WORDS limit (read from settings, default 500)
+        const maxWordsSetting = await getSetting("MAX_WORDS");
+        const maxWords = maxWordsSetting ? parseInt(maxWordsSetting, 10) : 500;
+        const wordCount = argument.trim().split(/\s+/).length;
+        if (wordCount > maxWords) {
+          return err(`Argument exceeds maximum word limit of ${maxWords} words (submitted: ${wordCount} words)`);
         }
 
         await saveArgument(bid, round, my_side, argument);

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import { api } from '$lib/api';
+	import { api, subscribeToBattle } from '$lib/api';
 	import type { Battle, ChessState } from '$lib/types';
 
 	const battleId = ($page.params.id || '').toUpperCase();
@@ -10,7 +10,11 @@
 	let loading = $state(true);
 	let error = $state('');
 	let qrUrl = $state('');
+	// 'sse' = connected via Server-Sent Events, 'polling' = fallback interval
+	let connectionMode = $state<'sse' | 'polling'>('sse');
+
 	let interval: ReturnType<typeof setInterval> | null = null;
+	let unsubscribeSSE: (() => void) | null = null;
 
 	// ── Fetch battle state ────────────────────────────────────────────────────
 	async function fetchBattle() {
@@ -34,14 +38,49 @@
 		}
 	}
 
-	onMount(async () => {
-		await fetchBattle();
-		if (battle?.status !== 'finished') {
+	function startPollingFallback() {
+		connectionMode = 'polling';
+		if (!interval && battle?.status !== 'finished') {
 			interval = setInterval(fetchBattle, 3000);
 		}
+	}
+
+	onMount(async () => {
+		// Initial fetch to render immediately
+		await fetchBattle();
+
 		qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(window.location.href)}&bgcolor=ffffff&color=111111&margin=2`;
+
+		// Don't subscribe if battle is already finished
+		if (battle?.status === 'finished') return;
+
+		// Subscribe via SSE for real-time updates
+		unsubscribeSSE = subscribeToBattle(
+			battleId,
+			(data) => {
+				// SSE message received — update battle state reactively
+				battle = data as Battle;
+				error = '';
+				loading = false;
+				connectionMode = 'sse';
+				// If battle finished, stop everything
+				if ((data as Battle)?.status === 'finished') {
+					if (interval) { clearInterval(interval); interval = null; }
+					unsubscribeSSE?.();
+					unsubscribeSSE = null;
+				}
+			},
+			() => {
+				// SSE error — fall back to polling
+				startPollingFallback();
+			}
+		);
 	});
-	onDestroy(() => { if (interval) clearInterval(interval); });
+
+	onDestroy(() => {
+		if (interval) clearInterval(interval);
+		if (unsubscribeSSE) unsubscribeSSE();
+	});
 
 	// ── Chess board rendering ─────────────────────────────────────────────────
 	// We render the board from FEN directly in SVG/HTML — no external lib needed.
@@ -111,16 +150,21 @@
 	<header class="battle-header stagger-enter" style="animation-delay: 0.1s;">
 		<div class="header-top">
 			<a href="/" class="btn-outline">← LOBBY</a>
-			<div class="status-group">
-				{#if battle.status !== 'finished'}
-					<span class="live-indicator"><span class="live-blink"></span> LIVE</span>
-				{/if}
-				<span class="tag {battle.status === 'active' ? 'tag-green' : battle.status === 'judging' ? 'tag-gold' : 'tag-dim'}">
-					{statusLabel(battle.status)}
+		<div class="status-group">
+			{#if battle.status !== 'finished'}
+				<span class="live-indicator"><span class="live-blink"></span> LIVE</span>
+			{/if}
+			{#if battle.status !== 'finished'}
+				<span class="conn-badge font-mono {connectionMode === 'sse' ? 'conn-sse' : 'conn-poll'}">
+					<span class="conn-dot"></span>{connectionMode === 'sse' ? 'SSE' : 'POLLING'}
 				</span>
-				<span class="tag tag-dim border-white">♟ CHESS_MODE</span>
-				<span class="room-id font-mono">#{battleId}</span>
-			</div>
+			{/if}
+			<span class="tag {battle.status === 'active' ? 'tag-green' : battle.status === 'judging' ? 'tag-gold' : 'tag-dim'}">
+				{statusLabel(battle.status)}
+			</span>
+			<span class="tag tag-dim border-white">♟ CHESS_MODE</span>
+			<span class="room-id font-mono">#{battleId}</span>
+		</div>
 		</div>
 		
 		<h1 class="topic glitch-text">"AI CHESS ARENA"</h1>
@@ -375,6 +419,18 @@
 	width: 8px; height: 8px; background: var(--green);
 	box-shadow: 0 0 10px var(--green); animation: pulse-neon 1s infinite alternate;
 }
+.conn-badge {
+	display: flex; align-items: center; gap: 5px;
+	font-size: 0.65rem; letter-spacing: 1.5px;
+	padding: 2px 8px; border-radius: 2px;
+}
+.conn-sse { color: var(--green); border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.05); }
+.conn-poll { color: var(--gold); border: 1px solid rgba(255,190,11,0.3); background: rgba(255,190,11,0.05); }
+.conn-dot {
+	width: 5px; height: 5px; border-radius: 50%;
+}
+.conn-sse .conn-dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse-neon 1s infinite alternate; }
+.conn-poll .conn-dot { background: var(--gold); }
 .topic {
 	font-family: var(--font-display); font-weight: 700;
 	font-size: clamp(2rem, 5vw, 4rem); line-height: 1.1;

@@ -8,7 +8,7 @@ import rateLimit from "express-rate-limit";
 import { registerAllTools } from "./tools/battle.js";
 import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
 import {
-  getAllSettings, setSetting, getBattleStats,
+  getAllSettings, getSetting, setSetting, getBattleStats,
   createBattle, getBattle, addContender, updateBattleStatus,
   listActiveBattles, saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
@@ -72,6 +72,11 @@ async function runHTTP(): Promise<void> {
     message: { error: "Too many requests, slow down." },
   });
 
+  // Warn at startup if ADMIN_SECRET is not set — admin endpoints will be inaccessible
+  if (!process.env.ADMIN_SECRET) {
+    console.warn("[BattleArena MCP] WARNING: ADMIN_SECRET is not set. Admin endpoints will return 403 Forbidden.");
+  }
+
   // ── Admin API ────────────────────────────────────────────────────────────────────
   const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
@@ -79,7 +84,7 @@ async function runHTTP(): Promise<void> {
     
     if (!adminSecret) {
       // We must explicitly `return` so TypeScript knows we end execution here for this route.
-      res.status(500).json({ error: "ADMIN_SECRET not configured on server" });
+      res.status(403).json({ error: "Admin access is not configured. Set ADMIN_SECRET environment variable." });
       return;
     }
     
@@ -272,6 +277,13 @@ async function runHTTP(): Promise<void> {
       }
       if (my_side === "beta" && roundData?.beta_argument) {
         res.status(409).json(apiErr("Ya enviaste tu argumento en esta ronda.")); return;
+      }
+      // Enforce MAX_WORDS limit (read from settings, default 500)
+      const maxWordsSetting = await getSetting("MAX_WORDS");
+      const maxWords = maxWordsSetting ? parseInt(maxWordsSetting, 10) : 500;
+      const wordCount = (argument as string).trim().split(/\s+/).length;
+      if (wordCount > maxWords) {
+        res.status(400).json(apiErr(`Argument exceeds maximum word limit of ${maxWords} words (submitted: ${wordCount} words)`)); return;
       }
       await saveArgument(bid, round, my_side, argument);
       if (my_side === "beta") {
