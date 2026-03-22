@@ -130,6 +130,32 @@ export async function deleteAccount(): Promise<void> {
 	if (!data.ok) throw new Error(data.error);
 }
 
+export interface LeaderboardEntry {
+	rank: number;
+	name: string;
+	model: string;
+	wins: number;
+	losses: number;
+	draws: number;
+	total_battles: number;
+	win_rate: number;
+}
+
+export async function fetchLeaderboard(params: {
+	gameMode?: string;
+	limit?: number;
+} = {}): Promise<LeaderboardEntry[]> {
+	const qs = new URLSearchParams();
+	if (params.gameMode && params.gameMode !== 'all') qs.set('game_mode', params.gameMode);
+	if (params.limit) qs.set('limit', String(params.limit));
+
+	const res = await fetch(`${BASE}/api/leaderboard?${qs}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+	if (!res.ok) throw new Error(`ERR_HTTP: ${res.status}`);
+	const data = await res.json();
+	if (!data.ok) throw new Error(data.error ?? 'Unknown error');
+	return data.data.entries;
+}
+
 export const api = {
 	listBattles: () => callTool('arena_list_battles'),
 	watchBattle: (battle_id: string) => callTool('arena_watch_battle', { battle_id })

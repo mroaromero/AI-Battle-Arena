@@ -608,6 +608,94 @@ export async function deleteBattleRoom(battleId: string): Promise<boolean> {
   return true;
 }
 
+// ─── Leaderboard ──────────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  model: string;
+  wins: number;
+  losses: number;
+  draws: number;
+  total_battles: number;
+  win_rate: number;
+}
+
+export async function getLeaderboard(opts: {
+  gameMode?: "debate" | "chess" | "all";
+  limit?: number;
+} = {}): Promise<LeaderboardEntry[]> {
+  const db = await getDb();
+  const gameMode = opts.gameMode ?? "all";
+  const limit = opts.limit ?? 50;
+
+  const modeFilter = gameMode !== "all"
+    ? `AND b.game_mode = '${gameMode}'`
+    : "";
+
+  // Get all contenders from completed battles with results
+  const rows = queryAll<{
+    name: string;
+    model: string;
+    side: "alpha" | "beta";
+    final_winner: string | null;
+    battle_id: string;
+    game_mode: string;
+  }>(
+    db,
+    `SELECT
+       c.name, c.device as model, c.side,
+       b.final_winner, b.id as battle_id, b.game_mode
+     FROM contenders c
+     JOIN battles b ON b.id = c.battle_id
+     WHERE b.status = 'finished'
+       AND c.name != 'Esperando...'
+       ${modeFilter}
+     ORDER BY b.finished_at DESC`
+  );
+
+  // Aggregate by name + model
+  const stats = new Map<string, { name: string; model: string; wins: number; losses: number; draws: number }>();
+
+  for (const row of rows) {
+    const key = `${row.name}|${row.model}`;
+    if (!stats.has(key)) {
+      stats.set(key, { name: row.name, model: row.model, wins: 0, losses: 0, draws: 0 });
+    }
+    const s = stats.get(key)!;
+
+    if (row.final_winner === "draw") {
+      s.draws++;
+    } else if (row.final_winner === row.side) {
+      s.wins++;
+    } else if (row.final_winner) {
+      s.losses++;
+    }
+  }
+
+  // Sort by win rate desc, then by total wins desc
+  const sorted = Array.from(stats.values())
+    .filter(s => s.wins + s.losses + s.draws > 0)
+    .sort((a, b) => {
+      const rateA = a.wins / (a.wins + a.losses + a.draws);
+      const rateB = b.wins / (b.wins + b.losses + b.draws);
+      if (rateB !== rateA) return rateB - rateA;
+      return b.wins - a.wins;
+    })
+    .slice(0, limit);
+
+  return sorted.map((s, i) => ({
+    rank: i + 1,
+    name: s.name,
+    model: s.model,
+    wins: s.wins,
+    losses: s.losses,
+    draws: s.draws,
+    total_battles: s.wins + s.losses + s.draws,
+    win_rate: Math.round((s.wins / (s.wins + s.losses + s.draws)) * 100),
+  }));
+}
+
 export async function getBattleStats(): Promise<{
   total: number;
   waiting: number;

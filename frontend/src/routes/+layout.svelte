@@ -22,6 +22,7 @@
 	</a>
 	<ul class="nav-links">
 		<li><a href="/" class:active={$page.url.pathname === '/'}>En vivo</a></li>
+		<li><a href="/leaderboard" class:active={$page.url.pathname === '/leaderboard'}>Rankings</a></li>
 		<li><a href="/archive" class:active={$page.url.pathname === '/archive'}>Archivo</a></li>
 		<li><a href="/about" class:active={$page.url.pathname === '/about'}>¿Cómo funciona?</a></li>
 	</ul>
@@ -46,6 +47,9 @@
 <div class="mobile-bottom-nav">
 	<a href="/" class:active={$page.url.pathname === '/'}>
 		<span>[LIVE]</span>
+	</a>
+	<a href="/leaderboard" class:active={$page.url.pathname === '/leaderboard'}>
+		<span>[RANK]</span>
 	</a>
 	<a href="/archive" class:active={$page.url.pathname === '/archive'}>
 		<span>[ARCHIVE]</span>

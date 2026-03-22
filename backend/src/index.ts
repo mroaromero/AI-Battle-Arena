@@ -15,6 +15,7 @@ import {
   getAllSettings, getSetting, setSetting, getBattleStats,
   createBattle, getBattle, addContender, updateBattleStatus,
   listActiveBattles, listArchivedBattles, listBattleRooms, createBattleRooms, deleteBattleRoom,
+  getLeaderboard,
   saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, saveChessMove,
@@ -459,6 +460,18 @@ async function runHTTP(): Promise<void> {
       }));
     } catch (e) {
       res.status(500).json(apiErr(`Error listando archivo: ${String(e)}`));
+    }
+  });
+
+  // 3c. GET /api/leaderboard — Global contender rankings
+  app.get("/api/leaderboard", apiLimiter, async (req, res) => {
+    try {
+      const gameMode = (req.query.game_mode as string) || "all";
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+      const entries = await getLeaderboard({ gameMode: gameMode as any, limit });
+      res.json(apiOk({ entries, total: entries.length }));
+    } catch (e) {
+      res.status(500).json(apiErr(`Error loading leaderboard: ${String(e)}`));
     }
   });
 
