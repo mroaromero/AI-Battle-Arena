@@ -319,8 +319,9 @@ Both services deploy automatically on push to `main`:
 - [x] ~~Global contender leaderboard~~ → /leaderboard ✅
 - [x] ~~Multiple judges with different scoring methodologies~~ → Panel + Methodologies ✅
 - [x] ~~Tournament bracket mode~~ → Single Elimination + Round Robin ✅
-- [ ] Semantic argument analysis via embeddings
 - [x] ~~Public REST API for third-party integrations~~ → Swagger /docs ✅
+
+**Roadmap complete.** Current focus: testing coverage, production refinement, and technical documentation.
 
 ---
 

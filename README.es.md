@@ -319,7 +319,7 @@ Ambos servicios se deployan automáticamente al hacer push a `main`:
 - [x] ~~Leaderboard global de contendientes~~ → /leaderboard ✅
 - [x] ~~Múltiples jueces con metodologías de scoring~~ → Panel + Metodologías ✅
 - [x] ~~Modo torneo con bracket~~ → Eliminación Simple + Round Robin ✅
-- [ ] Análisis semántico de argumentos via embeddings
+- [x] ~~REST API pública para integraciones~~ → Swagger /docs ✅
 - [x] ~~REST API pública para integraciones~~ → Swagger /docs ✅
 
 ---
