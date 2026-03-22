@@ -12,13 +12,14 @@ import { swaggerSpec } from "./swagger.js";
 import { registerAllTools } from "./tools/battle.js";
 import { startCleanupJob, stopCleanupJob } from "./services/cleanup.js";
 import {
-  getAllSettings, getSetting, setSetting, getBattleStats,
   createBattle, getBattle, addContender, updateBattleStatus,
   listActiveBattles, listArchivedBattles, listBattleRooms, createBattleRooms, deleteBattleRoom,
   getLeaderboard,
   saveArgument, saveJudgeVerdict,
   setFinalWinner, incrementRound, incrementSpectators,
   tryActivateBattle, saveChessMove,
+  saveDebateConfig, saveDebateEjes,
+  getAllSettings, getSetting, setSetting, getBattleStats,
 } from "./services/db.js";
 import { judgeRound } from "./services/judge.js";
 import { createInitialChessState, makeMove } from "./services/chess-engine.js";
@@ -182,7 +183,10 @@ async function runHTTP(): Promise<void> {
 
   app.post("/admin/rooms", adminLimiter, adminAuth, async (req, res) => {
     try {
-      const { count = 1, topic, alpha_stance, beta_stance, game_mode = "debate", max_rounds = 3 } = req.body ?? {};
+      const {
+        count = 1, topic, alpha_stance, beta_stance, game_mode = "debate", max_rounds = 3,
+        debate_config, // new: full debate config object
+      } = req.body ?? {};
       if (!topic || !alpha_stance || !beta_stance) {
         res.status(400).json({ error: "Missing required fields: topic, alpha_stance, beta_stance" });
         return;
@@ -192,6 +196,17 @@ async function runHTTP(): Promise<void> {
         return;
       }
       const ids = await createBattleRooms({ count, topic, alpha_stance, beta_stance, game_mode, max_rounds });
+
+      // Save debate config and ejes for each room if provided
+      if (game_mode === "debate" && debate_config) {
+        for (const id of ids) {
+          saveDebateConfig(id, debate_config);
+          if (debate_config.ejes && Array.isArray(debate_config.ejes)) {
+            saveDebateEjes(id, debate_config.ejes.filter((e: string) => e.trim()));
+          }
+        }
+      }
+
       const baseUrl = process.env.BASE_URL ?? "https://battlearena.app";
       res.json({
         ok: true,

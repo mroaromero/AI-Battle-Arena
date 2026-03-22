@@ -162,6 +162,16 @@ export function DashboardPage() {
     beta_stance: '',
     game_mode: 'debate' as 'debate' | 'chess',
     max_rounds: 3,
+    // Debate config
+    debate_mode: 'manual' as 'manual' | 'random',
+    ejes: ['', '', '', '', ''] as string[],
+    judges: ['anthropic'] as string[],
+    methodology: 'retorica' as 'logica' | 'retorica' | 'academica',
+    moderator_enabled: true,
+    timer_total: 20,
+    timer_opening: 30,
+    timer_cross: 120,
+    timer_synthesis: 45,
   });
   const [creatingRooms, setCreatingRooms] = useState(false);
   const [deletingRoom, setDeletingRoom] = useState<string | null>(null);
@@ -244,13 +254,53 @@ export function DashboardPage() {
     e.preventDefault();
     if (!secret || !roomForm.topic.trim() || !roomForm.alpha_stance.trim() || !roomForm.beta_stance.trim()) return;
     setCreatingRooms(true);
-    const result = await api.createRooms(secret, roomForm);
+
+    // Build debate config if game_mode is debate
+    let debate_config = undefined;
+    if (roomForm.game_mode === 'debate') {
+      const validEjes = roomForm.ejes.filter(e => e.trim());
+      if (validEjes.length < 1) {
+        showToast('err', 'INGRESA AL MENOS 1 EJE DE DEBATE');
+        setCreatingRooms(false);
+        return;
+      }
+      debate_config = {
+        mode: roomForm.debate_mode,
+        topic: roomForm.topic,
+        ejes: validEjes,
+        alpha_stance: roomForm.alpha_stance,
+        beta_stance: roomForm.beta_stance,
+        judges: roomForm.judges,
+        methodology: roomForm.methodology,
+        moderator_enabled: roomForm.moderator_enabled,
+        timers: {
+          total_minutes: roomForm.timer_total,
+          opening_seconds: roomForm.timer_opening,
+          cross_seconds: roomForm.timer_cross,
+          synthesis_seconds: roomForm.timer_synthesis,
+          present_seconds: 15,
+        },
+        max_ejes: validEjes.length,
+      };
+    }
+
+    const body: any = {
+      count: roomForm.count,
+      topic: roomForm.topic,
+      alpha_stance: roomForm.alpha_stance,
+      beta_stance: roomForm.beta_stance,
+      game_mode: roomForm.game_mode,
+      max_rounds: roomForm.game_mode === 'debate' ? roomForm.ejes.filter(e => e.trim()).length : 999,
+    };
+    if (debate_config) body.debate_config = debate_config;
+
+    const result = await api.createRooms(secret, body);
     setCreatingRooms(false);
     if (result.data) {
       showToast('ok', `${result.data.created} SALA${result.data.created > 1 ? 'S' : ''} CREADA${result.data.created > 1 ? 'S' : ''}`);
-      setRoomForm({ count: 1, topic: '', alpha_stance: '', beta_stance: '', game_mode: 'debate', max_rounds: 3 });
+      setRoomForm({ count: 1, topic: '', alpha_stance: '', beta_stance: '', game_mode: 'debate', max_rounds: 3, debate_mode: 'manual', ejes: ['', '', '', '', ''], judges: ['anthropic'], methodology: 'retorica', moderator_enabled: true, timer_total: 20, timer_opening: 30, timer_cross: 120, timer_synthesis: 45 });
       loadRooms();
-      loadData(); // refresh stats
+      loadData();
     } else if (result.error === 'ERR_AUTH') {
       clearSession(); navigate('/login', { replace: true });
     } else {
@@ -520,6 +570,105 @@ export function DashboardPage() {
                 className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-beta transition-colors" />
             </div>
           </div>
+
+          {/* Debate Config (only for debate mode) */}
+          {roomForm.game_mode === 'debate' && (
+            <div className="border border-borderBright bg-surface2 p-4 mb-4 space-y-4">
+              <div className="font-mono text-[0.55rem] text-gold uppercase tracking-widest">
+                CONFIGURACIÓN DE DEBATE
+              </div>
+
+              {/* Ejes */}
+              <div>
+                <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">
+                  EJES DE DEBATE (SUB-PREGUNTAS)
+                </label>
+                {roomForm.ejes.map((eje, i) => (
+                  <input key={i} type="text" value={eje}
+                    onChange={e => {
+                      const newEjes = [...roomForm.ejes];
+                      newEjes[i] = e.target.value;
+                      setRoomForm(f => ({ ...f, ejes: newEjes }));
+                    }}
+                    placeholder={`Eje ${i + 1}: ¿...?`}
+                    className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-gold transition-colors mb-1" />
+                ))}
+              </div>
+
+              {/* Judges */}
+              <div>
+                <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">
+                  PANEL DE JUECES
+                </label>
+                <div className="flex gap-2">
+                  {['anthropic', 'openrouter', 'groq'].map(j => (
+                    <label key={j} className="flex items-center gap-1.5 font-mono text-xs text-text cursor-pointer">
+                      <input type="checkbox" checked={roomForm.judges.includes(j)}
+                        onChange={e => {
+                          const newJudges = e.target.checked
+                            ? [...roomForm.judges, j]
+                            : roomForm.judges.filter(x => x !== j);
+                          setRoomForm(f => ({ ...f, judges: newJudges.length ? newJudges : ['anthropic'] }));
+                        }}
+                        className="accent-gold" />
+                      {j.toUpperCase()}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Methodology */}
+              <div>
+                <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">
+                  METODOLOGÍA DE EVALUACIÓN
+                </label>
+                <select value={roomForm.methodology}
+                  onChange={e => setRoomForm(f => ({ ...f, methodology: e.target.value as any }))}
+                  className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-gold transition-colors">
+                  <option value="logica">LÓGICA (50% coherencia, 35% evidencia, 15% retórica)</option>
+                  <option value="retorica">RETÓRICA (20% coherencia, 25% evidencia, 55% retórica)</option>
+                  <option value="academica">ACADÉMICA (30% coherencia, 50% evidencia, 20% retórica)</option>
+                </select>
+              </div>
+
+              {/* Moderator */}
+              <label className="flex items-center gap-2 font-mono text-xs text-text cursor-pointer">
+                <input type="checkbox" checked={roomForm.moderator_enabled}
+                  onChange={e => setRoomForm(f => ({ ...f, moderator_enabled: e.target.checked }))}
+                  className="accent-gold" />
+                MODERADOR LLM (síntesis + detección de falacias)
+              </label>
+
+              {/* Timers */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-0.5">TOTAL (MIN)</label>
+                  <input type="number" value={roomForm.timer_total} min={5} max={60}
+                    onChange={e => setRoomForm(f => ({ ...f, timer_total: parseInt(e.target.value) || 20 }))}
+                    className="w-full bg-bg border border-borderBright px-2 py-1.5 font-mono text-xs text-text outline-none focus:border-gold" />
+                </div>
+                <div>
+                  <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-0.5">APERTURA (S)</label>
+                  <input type="number" value={roomForm.timer_opening} min={10} max={120}
+                    onChange={e => setRoomForm(f => ({ ...f, timer_opening: parseInt(e.target.value) || 30 }))}
+                    className="w-full bg-bg border border-borderBright px-2 py-1.5 font-mono text-xs text-text outline-none focus:border-gold" />
+                </div>
+                <div>
+                  <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-0.5">CRUCE (S)</label>
+                  <input type="number" value={roomForm.timer_cross} min={30} max={600}
+                    onChange={e => setRoomForm(f => ({ ...f, timer_cross: parseInt(e.target.value) || 120 }))}
+                    className="w-full bg-bg border border-borderBright px-2 py-1.5 font-mono text-xs text-text outline-none focus:border-gold" />
+                </div>
+                <div>
+                  <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-0.5">SÍNTESIS (S)</label>
+                  <input type="number" value={roomForm.timer_synthesis} min={15} max={120}
+                    onChange={e => setRoomForm(f => ({ ...f, timer_synthesis: parseInt(e.target.value) || 45 }))}
+                    className="w-full bg-bg border border-borderBright px-2 py-1.5 font-mono text-xs text-text outline-none focus:border-gold" />
+                </div>
+              </div>
+            </div>
+          )}
+
           <button type="submit" disabled={creatingRooms || !roomForm.topic.trim() || !roomForm.alpha_stance.trim() || !roomForm.beta_stance.trim()}
             className="w-full bg-beta text-bg font-mono font-extrabold text-[0.65rem] tracking-[0.25em] uppercase py-3 transition-all hover:bg-white hover:text-black disabled:opacity-30 disabled:pointer-events-none">
             {creatingRooms ? (
