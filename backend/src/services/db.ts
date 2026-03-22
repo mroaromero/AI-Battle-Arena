@@ -29,6 +29,7 @@ async function getDb(): Promise<SqlJsDatabase> {
 
   initSchema(_db);
   initUsersSchema(_db);
+  (globalThis as any).__battleArenaDb = _db;
   return _db;
 }
 
@@ -51,9 +52,24 @@ function initSchema(db: SqlJsDatabase): void {
       created_at      TEXT NOT NULL,
       started_at      TEXT,
       finished_at     TEXT,
-      final_winner    TEXT
+      final_winner    TEXT,
+      -- New debate system columns
+      debate_config   TEXT DEFAULT NULL,
+      current_eje     INTEGER NOT NULL DEFAULT 0,
+      current_phase   TEXT DEFAULT 'waiting',
+      phase_started_at TEXT,
+      global_started_at TEXT
     );
+  `);
 
+  // Migrate existing battles table (add columns if missing)
+  try { db.run(`ALTER TABLE battles ADD COLUMN debate_config TEXT DEFAULT NULL`); } catch {}
+  try { db.run(`ALTER TABLE battles ADD COLUMN current_eje INTEGER NOT NULL DEFAULT 0`); } catch {}
+  try { db.run(`ALTER TABLE battles ADD COLUMN current_phase TEXT DEFAULT 'waiting'`); } catch {}
+  try { db.run(`ALTER TABLE battles ADD COLUMN phase_started_at TEXT`); } catch {}
+  try { db.run(`ALTER TABLE battles ADD COLUMN global_started_at TEXT`); } catch {}
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS contenders (
       battle_id    TEXT NOT NULL,
       side         TEXT NOT NULL,
@@ -92,6 +108,45 @@ function initSchema(db: SqlJsDatabase): void {
       moves_json   TEXT NOT NULL DEFAULT '[]',
       last_side    TEXT,
       updated_at   TEXT NOT NULL,
+      FOREIGN KEY (battle_id) REFERENCES battles(id)
+    );
+
+    -- New debate system tables
+    CREATE TABLE IF NOT EXISTS debate_ejes (
+      battle_id    TEXT NOT NULL,
+      eje_number   INTEGER NOT NULL,
+      question     TEXT NOT NULL,
+      PRIMARY KEY (battle_id, eje_number),
+      FOREIGN KEY (battle_id) REFERENCES battles(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS debate_phases (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      battle_id    TEXT NOT NULL,
+      eje_number   INTEGER NOT NULL,
+      phase_type   TEXT NOT NULL,
+      side         TEXT,
+      argument     TEXT,
+      synthesis    TEXT,
+      started_at   TEXT NOT NULL,
+      ended_at     TEXT,
+      FOREIGN KEY (battle_id) REFERENCES battles(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS judge_scores (
+      battle_id       TEXT NOT NULL,
+      eje_number      INTEGER NOT NULL,
+      judge_name      TEXT NOT NULL,
+      winner          TEXT NOT NULL,
+      alpha_coherence INTEGER NOT NULL DEFAULT 0,
+      beta_coherence  INTEGER NOT NULL DEFAULT 0,
+      alpha_evidence  INTEGER NOT NULL DEFAULT 0,
+      beta_evidence   INTEGER NOT NULL DEFAULT 0,
+      alpha_rhetoric  INTEGER NOT NULL DEFAULT 0,
+      beta_rhetoric   INTEGER NOT NULL DEFAULT 0,
+      alpha_total     INTEGER NOT NULL DEFAULT 0,
+      beta_total      INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (battle_id, eje_number, judge_name),
       FOREIGN KEY (battle_id) REFERENCES battles(id)
     );
 
@@ -693,7 +748,100 @@ export async function getLeaderboard(opts: {
     draws: s.draws,
     total_battles: s.wins + s.losses + s.draws,
     win_rate: Math.round((s.wins / (s.wins + s.losses + s.draws)) * 100),
-  }));
+   }));
+}
+
+// ─── Debate system ────────────────────────────────────────────────────────────
+
+export function saveDebateConfig(battleId: string, config: Record<string, unknown>): void {
+  const db = getDbSync();
+  run(db, "UPDATE battles SET debate_config = ? WHERE id = ?", [JSON.stringify(config), battleId]);
+  persist(db);
+}
+
+export function getDebateConfig(battleId: string): Record<string, unknown> | null {
+  const db = getDbSync();
+  const row = queryOne<{ debate_config: string | null }>(db, "SELECT debate_config FROM battles WHERE id = ?", [battleId]);
+  if (!row?.debate_config) return null;
+  try { return JSON.parse(row.debate_config); } catch { return null; }
+}
+
+export function saveDebateEjes(battleId: string, ejes: string[]): void {
+  const db = getDbSync();
+  for (let i = 0; i < ejes.length; i++) {
+    run(db, "INSERT OR REPLACE INTO debate_ejes (battle_id, eje_number, question) VALUES (?, ?, ?)",
+      [battleId, i + 1, ejes[i]]);
+  }
+  persist(db);
+}
+
+export function getDebateEjes(battleId: string): { eje_number: number; question: string }[] {
+  const db = getDbSync();
+  return queryAll(db, "SELECT eje_number, question FROM debate_ejes WHERE battle_id = ? ORDER BY eje_number", [battleId]);
+}
+
+export function saveDebatePhase(battleId: string, ejeNumber: number, phaseType: string, side: string | null, argument: string | null, synthesis: string | null): void {
+  const db = getDbSync();
+  const now = new Date().toISOString();
+  run(db, `INSERT INTO debate_phases (battle_id, eje_number, phase_type, side, argument, synthesis, started_at, ended_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [battleId, ejeNumber, phaseType, side, argument, synthesis, now, now]);
+  persist(db);
+}
+
+export function getDebatePhases(battleId: string): {
+  eje_number: number; phase_type: string; side: string | null;
+  argument: string | null; synthesis: string | null;
+  started_at: string; ended_at: string | null;
+}[] {
+  const db = getDbSync();
+  return queryAll(db,
+    "SELECT eje_number, phase_type, side, argument, synthesis, started_at, ended_at FROM debate_phases WHERE battle_id = ? ORDER BY id",
+    [battleId]);
+}
+
+export function saveJudgeScore(battleId: string, ejeNumber: number, judgeName: string, winner: string, scores: Record<string, number>): void {
+  const db = getDbSync();
+  run(db, `INSERT OR REPLACE INTO judge_scores
+           (battle_id, eje_number, judge_name, winner, alpha_coherence, beta_coherence, alpha_evidence, beta_evidence, alpha_rhetoric, beta_rhetoric, alpha_total, beta_total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [battleId, ejeNumber, judgeName, winner,
+     scores.alpha_coherence ?? 0, scores.beta_coherence ?? 0,
+     scores.alpha_evidence ?? 0, scores.beta_evidence ?? 0,
+     scores.alpha_rhetoric ?? 0, scores.beta_rhetoric ?? 0,
+     scores.alpha_total ?? 0, scores.beta_total ?? 0]);
+  persist(db);
+}
+
+export function getJudgeScores(battleId: string): {
+  eje_number: number; judge_name: string; winner: string;
+  alpha_total: number; beta_total: number;
+}[] {
+  const db = getDbSync();
+  return queryAll(db,
+    "SELECT eje_number, judge_name, winner, alpha_total, beta_total FROM judge_scores WHERE battle_id = ? ORDER BY eje_number, judge_name",
+    [battleId]);
+}
+
+export function updateDebatePhase(battleId: string, eje: number, phase: string): void {
+  const db = getDbSync();
+  const now = new Date().toISOString();
+  run(db, "UPDATE battles SET current_eje = ?, current_phase = ?, phase_started_at = ? WHERE id = ?",
+    [eje, phase, now, battleId]);
+  if (!queryOne<{ global_started_at: string | null }>(db, "SELECT global_started_at FROM battles WHERE id = ?", [battleId])?.global_started_at) {
+    run(db, "UPDATE battles SET global_started_at = ? WHERE id = ?", [now, battleId]);
+  }
+  persist(db);
+}
+
+export function getDbSync(): SqlJsDatabase {
+  // Synchronous access to the initialized DB for debate phase management
+  // This works because getDb() is called at startup and _db is cached
+  // We use a lazy getter pattern
+  if (!(globalThis as any).__battleArenaDb) {
+    throw new Error("Database not initialized — call getDb() first");
+  }
+  return (globalThis as any).__battleArenaDb as SqlJsDatabase;
 }
 
 export async function getBattleStats(): Promise<{

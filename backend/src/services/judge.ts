@@ -1,5 +1,6 @@
 import type { Battle, RoundScores } from "../types.js";
 import { createJudgeProvider } from "./llm-providers.js";
+import { getMethodologyWeights, type Methodology } from "./debate-engine.js";
 
 // ─── Judge Output ─────────────────────────────────────────────────────────────
 
@@ -8,6 +9,39 @@ interface JudgeOutput {
   verdict: string;
   scores: RoundScores;
   judge_provider?: string;
+}
+
+// ─── Panel Output (aggregated from multiple judges) ────────────────────────────
+
+export interface PanelJudgeScore {
+  judge_name: string;
+  winner: "alpha" | "beta" | "draw";
+  scores: RoundScores;
+}
+
+export interface PanelOutput {
+  winner: "alpha" | "beta" | "draw";
+  verdict: string;
+  scores: RoundScores;
+  panel: PanelJudgeScore[];
+  consensus: boolean;  // true if all judges agreed
+}
+
+// ─── Judge a single eje with methodology weighting ─────────────────────────────
+
+export function applyMethodology(scores: RoundScores, methodology: Methodology): { alpha_total: number; beta_total: number } {
+  const w = getMethodologyWeights(methodology);
+  const alphaWeighted = Math.round(
+    scores.alpha_coherence * w.coherence +
+    scores.alpha_evidence * w.evidence +
+    scores.alpha_rhetoric * w.rhetoric
+  );
+  const betaWeighted = Math.round(
+    scores.beta_coherence * w.coherence +
+    scores.beta_evidence * w.evidence +
+    scores.beta_rhetoric * w.rhetoric
+  );
+  return { alpha_total: alphaWeighted, beta_total: betaWeighted };
 }
 
 // ─── Judge a completed round ──────────────────────────────────────────────────
@@ -109,6 +143,99 @@ Criterios:
   }
 }
 
+// ─── Panel judge — multiple judges score, results aggregated ────────────────────
+
+export async function judgePanel(
+  battle: Battle,
+  ejeNumber: number,
+  alphaArgument: string,
+  betaArgument: string,
+  methodology: Methodology,
+  judgeNames: string[] = ["anthropic"]
+): Promise<PanelOutput> {
+  // In mock mode, return single mock judge
+  const provider = await createJudgeProvider();
+  if (!provider) {
+    const mock = mockJudge(alphaArgument, betaArgument, ejeNumber);
+    const weighted = applyMethodology(mock.scores, methodology);
+    return {
+      winner: mock.winner,
+      verdict: mock.verdict,
+      scores: { ...mock.scores, alpha_total: weighted.alpha_total, beta_total: weighted.beta_total },
+      panel: [{ judge_name: "mock", winner: mock.winner, scores: mock.scores }],
+      consensus: true,
+    };
+  }
+
+  // Run each judge (sequentially to avoid rate limits)
+  const panelResults: PanelJudgeScore[] = [];
+
+  for (const judgeName of judgeNames) {
+    try {
+      const result = await judgeRound(battle, ejeNumber, alphaArgument, betaArgument);
+      panelResults.push({
+        judge_name: result.judge_provider ?? judgeName,
+        winner: result.winner,
+        scores: result.scores,
+      });
+    } catch (e) {
+      console.error(`[Panel] Judge ${judgeName} failed: ${e}`);
+      panelResults.push({
+        judge_name: judgeName,
+        winner: "draw",
+        scores: {
+          alpha_coherence: 50, alpha_evidence: 50, alpha_rhetoric: 50, alpha_total: 50,
+          beta_coherence: 50, beta_evidence: 50, beta_rhetoric: 50, beta_total: 50,
+        },
+      });
+    }
+  }
+
+  // Aggregate: average scores across judges
+  const count = panelResults.length;
+  const avgScores: RoundScores = {
+    alpha_coherence: Math.round(panelResults.reduce((s, p) => s + p.scores.alpha_coherence, 0) / count),
+    alpha_evidence: Math.round(panelResults.reduce((s, p) => s + p.scores.alpha_evidence, 0) / count),
+    alpha_rhetoric: Math.round(panelResults.reduce((s, p) => s + p.scores.alpha_rhetoric, 0) / count),
+    alpha_total: Math.round(panelResults.reduce((s, p) => s + p.scores.alpha_total, 0) / count),
+    beta_coherence: Math.round(panelResults.reduce((s, p) => s + p.scores.beta_coherence, 0) / count),
+    beta_evidence: Math.round(panelResults.reduce((s, p) => s + p.scores.beta_evidence, 0) / count),
+    beta_rhetoric: Math.round(panelResults.reduce((s, p) => s + p.scores.beta_rhetoric, 0) / count),
+    beta_total: Math.round(panelResults.reduce((s, p) => s + p.scores.beta_total, 0) / count),
+  };
+
+  // Apply methodology weights
+  const weighted = applyMethodology(avgScores, methodology);
+  const finalScores = { ...avgScores, alpha_total: weighted.alpha_total, beta_total: weighted.beta_total };
+
+  // Determine winner: majority vote, then by total score
+  const alphaWins = panelResults.filter(p => p.winner === "alpha").length;
+  const betaWins = panelResults.filter(p => p.winner === "beta").length;
+  const draws = panelResults.filter(p => p.winner === "draw").length;
+
+  let winner: "alpha" | "beta" | "draw";
+  if (alphaWins > betaWins && alphaWins > draws) winner = "alpha";
+  else if (betaWins > alphaWins && betaWins > draws) winner = "beta";
+  else if (alphaWins === betaWins && alphaWins > 0) {
+    // Tiebreak by total score
+    winner = weighted.alpha_total > weighted.beta_total ? "alpha" : weighted.beta_total > weighted.alpha_total ? "beta" : "draw";
+  } else winner = "draw";
+
+  const consensus = panelResults.every(p => p.winner === winner);
+
+  const verdict = consensus
+    ? `Panel unánime: ${winner.toUpperCase()} (${count} jueces)`
+    : `Panel dividido (${count} jueces). Mayoría: ${winner.toUpperCase()}. Jueces: ${panelResults.map(p => `${p.judge_name}→${p.winner}`).join(", ")}`;
+
+  return {
+    winner,
+    verdict,
+    scores: finalScores,
+    panel: panelResults,
+    consensus,
+  };
+}
+
 // ─── Mock judge for development / no-API-key mode ────────────────────────────
 
 function mockJudge(_alpha: string, _beta: string, round: number): JudgeOutput {
@@ -123,7 +250,7 @@ function mockJudge(_alpha: string, _beta: string, round: number): JudgeOutput {
 
   return {
     winner,
-    verdict: `[MODO DEMO — sin API key] Ronda ${round}: ${winner === "draw" ? "Ambos contendientes empataron." : `${winner === "alpha" ? "Alpha" : "Beta"} obtuvo ventaja marginal.`}`,
+    verdict: `[MODO DEMO — sin API key] Eje ${round}: ${winner === "draw" ? "Ambos contendientes empataron." : `${winner === "alpha" ? "Alpha" : "Beta"} obtuvo ventaja marginal.`}`,
     scores: {
       alpha_coherence: aC, alpha_evidence: aE, alpha_rhetoric: aR,
       alpha_total: Math.round((aC + aE + aR) / 3),
