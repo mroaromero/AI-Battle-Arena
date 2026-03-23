@@ -278,11 +278,15 @@ export function DashboardPage() {
 
         if (statusRes.data) setStatus(statusRes.data);
         if (configRes.error === "ERR_AUTH") {
+          console.log("[DEBUG] loadData got ERR_AUTH!");
           clearSession();
           navigate("/login", { replace: true });
           return;
         }
-        if (configRes.data) setConfig(configRes.data);
+        if (configRes.data) {
+          console.log("[DEBUG] loadData got config:", Object.keys(configRes.data).length, "keys");
+          setConfig(configRes.data);
+        }
         loadRooms();
         loadTournaments();
       } finally {
@@ -304,6 +308,8 @@ export function DashboardPage() {
     e.preventDefault();
     if (!secret) return;
 
+    console.log("[DEBUG] handleSave called, edits:", JSON.stringify(edits));
+
     // Client-side validation
     const mr = edits["MAX_ROUNDS"];
     if (mr !== undefined && mr !== "") {
@@ -324,6 +330,7 @@ export function DashboardPage() {
 
     setSaving(true);
     const result = await api.saveConfig(secret, edits);
+    console.log("[DEBUG] saveConfig result:", JSON.stringify(result));
     setSaving(false);
 
     if (result.data) {

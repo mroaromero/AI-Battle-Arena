@@ -144,6 +144,7 @@ async function runHTTP(): Promise<void> {
   });
 
   app.get("/admin/config", adminLimiter, adminAuth, async (_req, res) => {
+    console.log("[DEBUG] GET /admin/config called");
     const settings = await getAllSettings();
     // Mask API keys so they are not exposed in plaintext over the wire
     const maskedSettings = { ...settings };
@@ -162,6 +163,7 @@ async function runHTTP(): Promise<void> {
   });
 
   app.post("/admin/config", adminLimiter, adminAuth, async (req, res) => {
+    console.log("[DEBUG] POST /admin/config received:", JSON.stringify(req.body).substring(0, 200));
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       res.status(400).json({ error: "Invalid request body: expected a JSON object" });
