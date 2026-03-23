@@ -266,40 +266,53 @@ export function DashboardPage() {
           api.getConfig(secret),
         ]);
 
-        // Fetch available models (no auth required)
-        api.getModels().then((modelsRes) => {
-          if (modelsRes.data) setAvailableModels(modelsRes.data);
-        });
-
-        // Fetch provider connection status
-        api.getProvidersStatus(secret).then((provRes) => {
-          if (provRes.data) setProviderStatus(provRes.data.providers);
-        });
+        // Handle 429 rate limit — retry after 3s
+        if (statusRes.error === "ERR_RATE_LIMIT" || configRes.error === "ERR_RATE_LIMIT") {
+          isLoadingData.current = false;
+          if (showLoading) setLoading(false);
+          setTimeout(() => loadData(showLoading), 3000);
+          return;
+        }
 
         if (statusRes.data) setStatus(statusRes.data);
         if (configRes.error === "ERR_AUTH") {
-          console.log("[DEBUG] loadData got ERR_AUTH!");
           clearSession();
           navigate("/login", { replace: true });
           return;
         }
         if (configRes.data) {
-          console.log("[DEBUG] loadData got config:", Object.keys(configRes.data).length, "keys");
           setConfig(configRes.data);
         }
-        loadRooms();
-        loadTournaments();
       } finally {
         isLoadingData.current = false;
         if (showLoading) setLoading(false);
       }
     },
-    [secret, navigate, loadRooms, loadTournaments],
+    [secret, navigate],
   );
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Fetch models and provider status ONCE on mount, not on every loadData
+  useEffect(() => {
+    if (!secret) return;
+    api.getModels().then((res) => {
+      if (res.data) setAvailableModels(res.data);
+    });
+    api.getProvidersStatus(secret).then((res) => {
+      if (res.data) setProviderStatus(res.data.providers);
+    });
+  }, [secret]);
+
+  // Load rooms and tournaments after main data is ready (staggered)
+  useEffect(() => {
+    if (secret && !loading) {
+      loadRooms();
+      loadTournaments();
+    }
+  }, [secret, loading, loadRooms, loadTournaments]);
 
   const handleEdit = (k: string, v: string) =>
     setEdits((prev) => ({ ...prev, [k]: v }));
@@ -307,8 +320,6 @@ export function DashboardPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!secret) return;
-
-    console.log("[DEBUG] handleSave called, edits:", JSON.stringify(edits));
 
     // Client-side validation
     const mr = edits["MAX_ROUNDS"];
@@ -330,7 +341,6 @@ export function DashboardPage() {
 
     setSaving(true);
     const result = await api.saveConfig(secret, edits);
-    console.log("[DEBUG] saveConfig result:", JSON.stringify(result));
     setSaving(false);
 
     if (result.data) {
