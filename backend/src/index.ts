@@ -153,6 +153,8 @@ async function runHTTP(): Promise<void> {
       }
     };
     maskKey("ANTHROPIC_API_KEY");
+    maskKey("OPENAI_API_KEY");
+    maskKey("GOOGLE_API_KEY");
     maskKey("OPENROUTER_API_KEY");
     maskKey("GROQ_API_KEY");
     
@@ -173,6 +175,163 @@ async function runHTTP(): Promise<void> {
       }
     }
     res.json({ success: true });
+  });
+
+  // ── Provider connection status ──────────────────────────────────────────────
+  app.get("/admin/providers/status", adminLimiter, adminAuth, async (_req, res) => {
+    try {
+      const settings = await getAllSettings();
+      const check = (key: string) => Boolean(settings[key] && settings[key].length > 0);
+      res.json({
+        providers: {
+          anthropic: {
+            connected: check("ANTHROPIC_API_KEY"),
+            method: "api_key",
+            setupUrl: "https://console.anthropic.com/settings/keys",
+          },
+          openai: {
+            connected: check("OPENAI_API_KEY"),
+            method: "api_key",
+            setupUrl: "https://platform.openai.com/api-keys",
+          },
+          google: {
+            connected: check("GOOGLE_API_KEY"),
+            method: "api_key",
+            setupUrl: "https://aistudio.google.com/app/apikey",
+          },
+          openrouter: {
+            connected: check("OPENROUTER_API_KEY"),
+            method: "api_key",
+            setupUrl: "https://openrouter.ai/keys",
+          },
+          groq: {
+            connected: check("GROQ_API_KEY"),
+            method: "api_key",
+            setupUrl: "https://console.groq.com/keys",
+          },
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: `Error getting provider status: ${String(e)}` });
+    }
+  });
+
+  // ── Test provider connection ────────────────────────────────────────────────
+  app.post("/admin/providers/test", adminLimiter, adminAuth, async (req, res) => {
+    try {
+      const { provider } = req.body ?? {};
+      if (!provider || typeof provider !== "string") {
+        res.status(400).json({ error: "Missing required field: provider" });
+        return;
+      }
+
+      const settings = await getAllSettings();
+      const keyMap: Record<string, string> = {
+        anthropic: "ANTHROPIC_API_KEY",
+        openai: "OPENAI_API_KEY",
+        google: "GOOGLE_API_KEY",
+        openrouter: "OPENROUTER_API_KEY",
+        groq: "GROQ_API_KEY",
+      };
+      const modelMap: Record<string, string> = {
+        anthropic: settings["JUDGE_MODEL_ANTHROPIC"] || "claude-opus-4-5",
+        openai: settings["JUDGE_MODEL_OPENAI"] || "gpt-4o",
+        google: settings["JUDGE_MODEL_GOOGLE"] || "gemini-2.0-flash",
+        openrouter: settings["JUDGE_MODEL_OPENROUTER"] || "google/gemini-2.0-flash-001",
+        groq: settings["JUDGE_MODEL_GROQ"] || "llama-3.3-70b-versatile",
+      };
+
+      const apiKey = settings[keyMap[provider]];
+      if (!apiKey) {
+        res.json({ success: false, error: `${provider} API key not configured` });
+        return;
+      }
+
+      // Minimal chat call to test the key
+      let testError: string | null = null;
+      try {
+        if (provider === "anthropic") {
+          const r = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+            body: JSON.stringify({ model: modelMap.anthropic, max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] }),
+          });
+          if (!r.ok) testError = `HTTP ${r.status}: ${await r.text()}`;
+        } else if (provider === "openai") {
+          const r = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: modelMap.openai, max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] }),
+          });
+          if (!r.ok) testError = `HTTP ${r.status}: ${await r.text()}`;
+        } else if (provider === "google") {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelMap.google}:generateContent?key=${apiKey}`;
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Say OK" }] }], generationConfig: { maxOutputTokens: 10 } }),
+          });
+          if (!r.ok) testError = `HTTP ${r.status}: ${await r.text()}`;
+        } else if (provider === "openrouter") {
+          const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: modelMap.openrouter, max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] }),
+          });
+          if (!r.ok) testError = `HTTP ${r.status}: ${await r.text()}`;
+        } else if (provider === "groq") {
+          const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: modelMap.groq, max_tokens: 10, messages: [{ role: "user", content: "Say OK" }] }),
+          });
+          if (!r.ok) testError = `HTTP ${r.status}: ${await r.text()}`;
+        } else {
+          res.status(400).json({ error: `Unknown provider: ${provider}` });
+          return;
+        }
+      } catch (e) {
+        testError = String(e);
+      }
+
+      res.json({ success: !testError, error: testError });
+    } catch (e) {
+      res.status(500).json({ error: `Error testing provider: ${String(e)}` });
+    }
+  });
+
+  // ── Available models per provider (static list, no auth required)
+  app.get("/admin/models", (_req, res) => {
+    res.json({
+      anthropic: [
+        { id: "claude-opus-4-5", name: "Claude Opus 4.5" },
+        { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
+        { id: "claude-haiku-3-5", name: "Claude Haiku 3.5" },
+      ],
+      openai: [
+        { id: "gpt-4o", name: "GPT-4o" },
+        { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+        { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
+        { id: "o1", name: "o1" },
+        { id: "o1-mini", name: "o1 Mini" },
+      ],
+      google: [
+        { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+        { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+        { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
+      ],
+      openrouter: [
+        { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
+        { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B" },
+        { id: "mistralai/mistral-large", name: "Mistral Large" },
+        { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
+      ],
+      groq: [
+        { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B" },
+        { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B" },
+        { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B" },
+      ],
+    });
   });
 
   // ── Admin Room Management ──────────────────────────────────────────────────────

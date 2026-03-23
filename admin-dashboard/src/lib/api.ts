@@ -42,6 +42,9 @@ export type AdminStatus = {
   battles: { total: number; waiting: number; active: number; completed: number };
 };
 
+export type ModelOption = { id: string; name: string };
+export type ModelsResponse = Record<string, ModelOption[]>;
+
 export type BattleRoom = {
   id: string;
   topic: string;
@@ -117,5 +120,20 @@ export const api = {
   deleteTournament: (secret: string, id: string) =>
     request<{ deleted: boolean }>('/admin/tournaments/' + id, secret, {
       method: 'DELETE',
+    }),
+
+  getModels: () =>
+    fetch(`${API_URL}/admin/models`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => data ? { data: data as ModelsResponse } : { error: 'ERR_MODELS' })
+      .catch(() => ({ error: 'ERR_NETWORK' })) as Promise<{ data?: ModelsResponse; error?: string }>,
+
+  getProvidersStatus: (secret: string) =>
+    request<{ providers: Record<string, { connected: boolean; method: string; setupUrl: string }> }>('/admin/providers/status', secret),
+
+  testProvider: (secret: string, provider: string) =>
+    request<{ success: boolean; error: string | null }>('/admin/providers/test', secret, {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
     }),
 };
