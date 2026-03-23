@@ -329,7 +329,7 @@ export function DashboardPage() {
     if (result.data) {
       showToast("ok", "CONFIGURACIÓN APLICADA EXITOSAMENTE");
       setEdits({});
-      loadData();
+      loadData(false);
     } else if (result.error === "ERR_AUTH") {
       clearSession();
       navigate("/login", { replace: true });
@@ -434,7 +434,7 @@ export function DashboardPage() {
       setDebateConfig(null);
       setChessConfig(DEFAULT_CHESS);
       loadRooms();
-      loadData();
+      loadData(false);
     } else if (result.error === "ERR_AUTH") {
       clearSession();
       navigate("/login", { replace: true });
@@ -451,7 +451,7 @@ export function DashboardPage() {
     if (result.data) {
       showToast("ok", "SALA ELIMINADA");
       loadRooms();
-      loadData();
+      loadData(false);
     } else {
       showToast("err", `ERROR: ${result.error}`);
     }
@@ -863,7 +863,7 @@ export function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="font-mono text-[0.5rem] text-textDim uppercase tracking-wider block mb-1">
-                TEMA DEL DEBATE
+                {roomForm.game_mode === "chess" ? "TEMA DEL AJEDREZ" : "TEMA DEL DEBATE"}
               </label>
               <input
                 type="text"
@@ -871,7 +871,7 @@ export function DashboardPage() {
                 onChange={(e) =>
                   setRoomForm((f) => ({ ...f, topic: e.target.value }))
                 }
-                placeholder="¿La IA reemplazará a los profesores?"
+                placeholder={roomForm.game_mode === "chess" ? "Campeonato mundial de ajedrez" : "¿La IA reemplazará a los profesores?"}
                 className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-beta transition-colors"
               />
             </div>
@@ -900,12 +900,11 @@ export function DashboardPage() {
                 </label>
                 <select
                   value={roomForm.game_mode}
-                  onChange={(e) =>
-                    setRoomForm((f) => ({
-                      ...f,
-                      game_mode: e.target.value as "debate" | "chess",
-                    }))
-                  }
+                  onChange={(e) => {
+                    const newMode = e.target.value as "debate" | "chess";
+                    setRoomForm((f) => ({ ...f, game_mode: newMode }));
+                    if (newMode === "chess") setDebateConfig(null);
+                  }}
                   className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text outline-none focus:border-beta transition-colors"
                 >
                   <option value="debate">DEBATE</option>
@@ -937,7 +936,7 @@ export function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
               <label className="font-mono text-[0.5rem] text-alpha uppercase tracking-wider block mb-1">
-                POSTURA ALPHA
+                {roomForm.game_mode === "chess" ? "JUGADOR BLANCAS" : "POSTURA ALPHA"}
               </label>
               <input
                 type="text"
@@ -945,13 +944,13 @@ export function DashboardPage() {
                 onChange={(e) =>
                   setRoomForm((f) => ({ ...f, alpha_stance: e.target.value }))
                 }
-                placeholder="A favor de la IA en educación"
+                placeholder={roomForm.game_mode === "chess" ? "IA con piezas blancas" : "A favor de la IA en educación"}
                 className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-alpha transition-colors"
               />
             </div>
             <div>
               <label className="font-mono text-[0.5rem] text-beta uppercase tracking-wider block mb-1">
-                POSTURA BETA
+                {roomForm.game_mode === "chess" ? "JUGADOR NEGRAS" : "POSTURA BETA"}
               </label>
               <input
                 type="text"
@@ -959,7 +958,7 @@ export function DashboardPage() {
                 onChange={(e) =>
                   setRoomForm((f) => ({ ...f, beta_stance: e.target.value }))
                 }
-                placeholder="Defensa del docente humano"
+                placeholder={roomForm.game_mode === "chess" ? "IA con piezas negras" : "Defensa del docente humano"}
                 className="w-full bg-bg border border-borderBright px-3 py-2 font-mono text-xs text-text placeholder-textDim outline-none focus:border-beta transition-colors"
               />
             </div>
