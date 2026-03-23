@@ -23,7 +23,6 @@ import { api, type AdminStatus, type BattleRoom } from "../lib/api";
 import {
   DebateConfigForm,
   type DebateConfig,
-  DEFAULT_DEBATE,
 } from "../components/DebateConfigForm";
 import {
   ChessConfigForm,
@@ -348,7 +347,6 @@ export function DashboardPage() {
   };
 
   // Scroll to API key input for a specific provider
-  const apiKeyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scrollToApiKey = (provider: string) => {
     const keyField = `${provider.toUpperCase()}_API_KEY`;
     const el = document.getElementById(`setting-${keyField}`);
@@ -364,9 +362,6 @@ export function DashboardPage() {
   const merged = { ...KNOWN_FIELDS, ...config };
 
   const apiKeys = Object.entries(merged).filter(([k]) => isKeyField(k));
-  const modelFields = Object.entries(merged).filter(([k]) =>
-    k.startsWith("JUDGE_MODEL_"),
-  );
   const combatParams = Object.entries(merged).filter(([k]) =>
     ["MAX_ROUNDS", "MAX_WORDS"].includes(k),
   );
@@ -615,7 +610,7 @@ export function DashboardPage() {
               {lang === "es" ? "EN" : "ES"}
             </button>
             <button
-              onClick={loadData}
+              onClick={() => loadData()}
               disabled={loading}
               className="flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-widest text-textMuted hover:text-text border border-borderBright hover:border-borderBright px-3 py-1.5 transition-colors disabled:opacity-40"
             >

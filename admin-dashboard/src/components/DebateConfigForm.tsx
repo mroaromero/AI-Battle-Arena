@@ -45,7 +45,7 @@ export function DebateConfigForm({
   onChange: (config: DebateConfig | null) => void;
   initialValues?: Partial<DebateConfig>;
 }) {
-  const [debateMode, setDebateMode] = useState<"manual" | "random">(
+  const [debateMode, _setDebateMode] = useState<"manual" | "random">(
     initialValues?.mode ?? DEFAULT_DEBATE.mode,
   );
   const [ejes, setEjes] = useState<string[]>(
